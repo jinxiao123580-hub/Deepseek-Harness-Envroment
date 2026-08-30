@@ -23,6 +23,10 @@ Deepseek-Harness-Envroment/
 │   ├── filters.toml       ← 过滤规则
 │   ├── CLAUDE.md          ← rtk 指令块（可给任意项目 init 用）
 │   └── README.md
+├── config/
+│   ├── settings.yaml             ← 可移植的 provider/API 设置（无密钥）
+│   ├── .credentials.example.yaml ← 密钥占位模板（勿填真实 Key）
+│   └── set-credentials.ps1       ← 交互式填写各平台 API Key（写本地、不进 git）
 └── launcher/
     ├── HarnessLauncher.cs ← 参数化启动器源码
     ├── build.ps1          ← csc 编译脚本（无需 .NET SDK）

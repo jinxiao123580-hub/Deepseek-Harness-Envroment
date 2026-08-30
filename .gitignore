@@ -2,6 +2,12 @@
 launcher/dist/
 *.pdb
 
+# Secrets — never commit real API keys (keep the .example template only)
+.credentials*.yaml
+!.credentials.example.yaml
+config/.credentials.yaml
+config/*.local.yaml
+
 # OS / editor
 Thumbs.db
 Desktop.ini

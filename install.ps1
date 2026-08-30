@@ -111,11 +111,43 @@ if (-not $NoLauncher) {
     Write-Host "`n[4/5] 跳过启动器 (-NoLauncher)" -ForegroundColor Yellow
 }
 
-# ---------------- 5. 收尾 ---------------- #
-Write-Host "`n[5/5] 完成。" -ForegroundColor Cyan
+# ---------------- 5. API 设置迁移（其他平台 provider） ---------------- #
+Write-Host "`n[5/6] 迁移其他平台 API 设置 (settings.yaml) ..." -ForegroundColor Green
+try {
+    $cfgSettings = Join-Path $root "config\settings.yaml"
+    if (Test-Path $cfgSettings) {
+        $dshHome = Join-Path $env:USERPROFILE ".dsh"
+        New-Item -ItemType Directory -Force $dshHome | Out-Null
+        $dst = Join-Path $dshHome "settings.yaml"
+        if (Test-Path $dst) {
+            $bak = Join-Path $dshHome "settings.yaml.bak-migration"
+            Copy-Item $dst $bak -Force
+            Write-Host "  已备份现有 settings.yaml -> settings.yaml.bak-migration" -ForegroundColor Cyan
+        }
+        Copy-Item $cfgSettings $dst -Force
+        Write-Host "  已复制 provider/API 设置 -> $dst" -ForegroundColor Green
+        $providers = @('google','volcengine-coding-plan','volcengine-agent-plan','aliyun-bailian','siliconflow','deepseek-qq')
+        Write-Host ("  已带过来的 provider: " + ($providers -join ', ')) -ForegroundColor Cyan
+    } else {
+        Write-Warning "  未找到 config\settings.yaml"
+    }
+    $credScript = Join-Path $root "config\set-credentials.ps1"
+    if (Test-Path $credScript) {
+        Write-Host "  密钥: 仓库不含真实 Key（只有占位模板）。可交互式填写：" -ForegroundColor Cyan
+        $ans = Read-Host "  现在填写各平台 API Key? (y/n，直接回车跳过)"
+        if ($ans -match "^[yY]") {
+            powershell -ExecutionPolicy Bypass -File $credScript
+        }
+    }
+} catch {
+    Write-Warning "  迁移 API 设置失败: $($_.Exception.Message)"
+}
+
+# ---------------- 6. 收尾 ---------------- #
+Write-Host "`n[6/6] 完成。" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "下一步:" -ForegroundColor White
-Write-Host "  1. 配置 DeepSeek API Key: 在设置里填 DEEPSEEK_API_KEY（或设置环境变量）"
+Write-Host "  1. API 设置已迁 (settings.yaml)；若未在刚才步骤填 Key，请运行 config\set-credentials.ps1，或把旧机 .credentials.yaml 私下拷到 %USERPROFILE%\.dsh\"
 Write-Host "  2. 启动: 双击桌面的 'DeepSeek Harness 启动器.exe'"
 Write-Host "  3. (可选) 若访问 Google/Gemini 需要代理，运行前设置 DSH_HTTP_PROXY=http://127.0.0.1:<port>"
 Write-Host ""

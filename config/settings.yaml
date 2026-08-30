@@ -1,0 +1,77 @@
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+llm-pi-ai:
+  providers:
+    google:
+      apiKeyEnv: GEMINI_API_KEY
+    volcengine-coding-plan:
+      displayName: 火山 Coding Plan
+      apiKeyEnv: VOLCENGINE_CODING_PLAN_API_KEY
+      api: openai-completions
+      baseURL: https://ark.cn-beijing.volces.com/api/coding/v3
+      models:
+        - id: ark-code-latest
+          name: 火山 Coding Plan（控制台所选模型）
+    volcengine-agent-plan:
+      displayName: 火山 Agent Plan
+      apiKeyEnv: VOLCENGINE_AGENT_PLAN_API_KEY
+      api: openai-responses
+      baseURL: https://ark.cn-beijing.volces.com/api/plan/v3
+      models:
+        - id: deepseek-v4-flash
+        - id: deepseek-v4-pro
+    aliyun-bailian:
+      displayName: 阿里云百炼
+      apiKeyEnv: DASHSCOPE_API_KEY
+      api: openai-completions
+      baseURL: https://dashscope.aliyuncs.com/compatible-mode/v1
+      models:
+        - id: deepseek-v4-flash
+        - id: deepseek-v4-pro
+    siliconflow:
+      displayName: 硅基流动
+      apiKeyEnv: SILICONFLOW_API_KEY
+      api: openai-completions
+      baseURL: https://api.siliconflow.cn/v1
+      models:
+        - id: deepseek-ai/DeepSeek-V4-Flash
+    deepseek-qq:
+      displayName: DeepSeek QQ 独立
+      apiKeyEnv: DEEPSEEK_QQ_API_KEY
+      api: openai-completions
+      baseURL: https://api.deepseek.com
+      compat:
+        thinkingFormat: deepseek
+        supportsDeveloperRole: false
+        maxTokensField: max_tokens
+      models:
+        - id: deepseek-v4-flash-vision-exp
+          name: DeepSeek V4 Flash Vision（QQ 专用）
+          input:
+            - text
+            - image
+          reasoningEfforts:
+            high: high
+            max: max
+        - id: deepseek-v4-flash
+          name: DeepSeek V4 Flash（QQ 专用）
+          input:
+            - text
+          reasoningEfforts:
+            high: high
+            max: max
+        - id: deepseek-v4-pro
+          name: DeepSeek V4 Pro（QQ 专用）
+          input:
+            - text
+          reasoningEfforts:
+            high: high
+            max: max
+agent-default-model:
+  provider: deepseek-official
+  model: deepseek-v4-flash-vision-exp
+  reasoningEffort: high
+agent-presets:
+  default: router-standard
+ui-theme:
+  preference: system
