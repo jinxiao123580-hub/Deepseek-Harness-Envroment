@@ -1,0 +1,9 @@
+# Build outputs
+launcher/dist/
+*.pdb
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
