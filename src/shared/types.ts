@@ -45,6 +45,8 @@ export interface DshInstance {
   workspace?: string
   /** 独立 DSH_HOME(创建时固定为 join(runtimeRoot, 'homes', id),不可后续修改);缺省 = 共享 cfg.dshHome。 */
   dshHome?: string
+  /** 启动模式: 'normal' = 普通(默认), 'learning' = 学习模式(设 DSH_LAUNCHER_MODE=learning 环境变量)。 */
+  launcherMode?: 'normal' | 'learning'
 }
 
 /** Per-plugin user metadata (display-name override + remark), keyed by package name. */
@@ -375,6 +377,8 @@ export interface NewInstanceInput {
   homeMode?: 'shared' | 'isolated'
   /** homeMode='shared' 时的共享目标 home 路径;缺省 = 全局 cfg.dshHome(现状行为)。isolated 时忽略。 */
   home?: string
+  /** 启动模式: 'normal'(缺省)或 'learning'(注入 DSH_LAUNCHER_MODE=learning)。 */
+  launcherMode?: 'normal' | 'learning'
 }
 
 /** 整合包安装选项:新建实例的数据目录选择 + 失败插件重试清单。 */
@@ -425,6 +429,11 @@ export interface RecommendedBundle {
   license?: string
   /** Base name for the new instance's profile (defaults to `web`). */
   profileBase?: string
+  /**
+   * 该整合包创建的实例所用的启动模式。'learning' = 学习整合包:实例以
+   * DSH_LAUNCHER_MODE=learning 启动,并在实例列表打「学习」标签。
+   */
+  launcherMode?: 'normal' | 'learning'
   /** 插件清单 —— 计入数量,安装时逐个 `dsh plugin add` 直装。 */
   community: BundlePlugin[]
 }

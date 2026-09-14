@@ -298,6 +298,7 @@ export async function addInstance(input: NewInstanceInput): Promise<LauncherConf
     description: (input.description ?? '').trim(),
     enabled: true,
     workspace: join(cfg.runtimeRoot, 'workspaces', id),
+    ...(input.launcherMode === 'learning' ? { launcherMode: 'learning' as const } : {}),
     ...(isolated ? { dshHome: home } : {})
   }
   setConfig({ instances: [...cfg.instances, inst] })

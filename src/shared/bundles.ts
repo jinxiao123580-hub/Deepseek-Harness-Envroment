@@ -87,6 +87,34 @@ const COMMUNITY_BOOST: BundlePlugin[] = [
   { name: 'dsh-settings-organizer', spec: 'https://codeload.github.com/baihejiangnan/dsh-settings-organizer/tar.gz/refs/tags/v1.1.0', description: '设置页整理:可自定义的分层设置导航,只整理侧栏结构、不装改插件', flags: ['--strict-peer-dependencies=false', '--config.auto-install-peers=false'] }
 ]
 
+/**
+ * 学习整合包插件清单 —— 面向「用 DSH 学东西」的场景:读教材/论文、记笔记、
+ * 长期积累知识、画图讲解、边学边跑代码。
+ *
+ * 选型理由(每个插件都对应学习流程里的一个环节):
+ *  - 看:把教材/论文/电路图的图片喂给模型 → 视觉与 OCR
+ *  - 记:长期记忆 + 超长上下文 → 学过的内容不丢
+ *  - 讲:内联渲染 Mermaid/图表/表单 → 讲解结构化的知识
+ *  - 做:侧边栏内嵌浏览器与终端 → 边看教程边动手
+ *  - 管:扩展中心统一管理 skills / MCP → 装学习类技能包
+ * 全部为已收录在其它整合包、来源核实可装的插件,不引入新风险源。
+ */
+const LEARNING_KIT: BundlePlugin[] = [
+  { name: '@liustack/modlens', spec: 'github:liustack/modlens', description: '给纯文本模型添加视觉能力,可直接粘贴教材/PPT/电路图提问' },
+  { name: '@anionex/dsh-vision-toolkit', spec: 'github:Anionex/dsh-vision-toolkit', description: '图片问答、OCR、截图比对:拍下书页或板书即可转成可检索的文字' },
+  { name: 'dsh-tdai-memory', spec: 'dsh-tdai-memory', description: '长期记忆:对话捕获→结构化记忆提取→自动召回,学过的知识点沉淀下来' },
+  { name: '@vectorize-io/hindsight-coding-agents', spec: '@vectorize-io/hindsight-coding-agents', description: '长期项目记忆:自动沉淀历史与对话知识,复习时不用重新讲一遍背景' },
+  { name: 'billion-context-dsh', spec: 'billion-context-dsh', description: '超长上下文:模型驱动的主动压缩,长时间学习会话不会爆窗' },
+  { name: '@omdsh-dev/dsh-genui', spec: 'github:omdsh-dev/dsh-genui', description: '内联渲染图表、表单、Mermaid、3D:讲解原理时直接画出结构图与时序图' },
+  { name: 'dsh-better-sidebar', spec: 'github:omdsh-dev/DSH-better-sidebar', description: '侧边栏工作台:文件管理、编辑预览、内嵌浏览器、真实终端、Git 面板,边看教程边跑代码' },
+  { name: 'dsh-extension-hub', spec: 'dsh-extension-hub', description: '扩展中心:在设置页统一管理 skills、MCP 与插件,可从 Claude/Codex 导入' },
+  { name: 'dsh-at-file', spec: 'dsh-at-file', description: '输入 @ 引用工作区文件:把讲义、笔记、代码直接带进对话' },
+  { name: '@omdsh-dev/dsh-annotation', spec: 'github:omdsh-dev/dsh-annotation', description: '选中回复加批注随消息发送:对讲解逐条追问,模型按编号作答' },
+  { name: 'dsh-notification', spec: 'github:omdsh-dev/dsh-notification', description: '回复完成时桌面通知:长任务讲解/推导跑完不会漏掉' },
+  { name: 'dsh-session-manager', spec: 'github:dream12347/dsh-session-manager', description: '会话管理器:按学科整理学习对话,删除与归档' },
+  { name: 'dsh-plugin-healthcheck', spec: 'github:chenw2759-wq/dsh-plugin-healthcheck', description: '插件健康检查:确认学习套件没装坏、没带毒' }
+]
+
 /** 推荐整合包清单:EAC 已下架。 */
 export const RECOMMENDED_BUNDLES: RecommendedBundle[] = [
   {
@@ -97,6 +125,18 @@ export const RECOMMENDED_BUNDLES: RecommendedBundle[] = [
     license: 'MIT',
     description: `社区精选入门包(${STARTER_COMMUNITY.length} 插件):图片问答与 OCR 视觉、内联图表/表单 UI、@文件引用、消息批注、多工具对话导入、桌面通知、长期编码记忆、余额与峰谷监控、状态轮播、侧边栏工作台,一键直装快速起步。`,
     community: [...STARTER_COMMUNITY]
+  },
+  {
+    schemaVersion: 1,
+    id: 'learn',
+    name: '学习整合包',
+    version: '1.0.0',
+    license: 'MIT',
+    profileBase: 'learn',
+    // 关键:该整合包创建的实例默认以学习模式启动(DSH_LAUNCHER_MODE=learning)。
+    launcherMode: 'learning',
+    description: `为「用 DSH 学东西」准备的一整套环境(${LEARNING_KIT.length} 插件):拍照/截图读教材与论文、长期记忆与超长上下文、内联画图讲原理、侧边栏内嵌浏览器与终端边学边练、扩展中心统一管理学习技能包。安装后自动建一个已开启「学习模式」的独立实例,可与普通实例并行运行、随时切换。`,
+    community: [...LEARNING_KIT]
   },
   {
     schemaVersion: 1,

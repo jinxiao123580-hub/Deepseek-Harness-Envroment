@@ -1534,13 +1534,28 @@ function toCdn(url: string): string {
 }
 
 /**
+ * 并入内置的「本地专属」整合包(目前是带 launcherMode 的学习整合包)。
+ *
+ * 在线库正常时 fetchRemoteBundles 只用远程清单(不含内置),但 launcherMode 是
+ * 启动器本地字段、dsh-plugin-pack 远程格式不承载它 —— 若不并入,联网后学习整合包
+ * 会从推荐列表里消失。故无论在线与否都并入一次;同 id 时以列表原有项为准(去重)。
+ * 离线分支传入的本就是 RECOMMENDED_BUNDLES,并入后集合不变。
+ */
+function withLocalOnlyBundles(base: RecommendedBundle[]): RecommendedBundle[] {
+  const localOnly = RECOMMENDED_BUNDLES.filter((b) => b.launcherMode === 'learning')
+  if (localOnly.length === 0) return base
+  const ids = new Set(base.map((b) => b.id))
+  return [...base, ...localOnly.filter((b) => !ids.has(b.id))]
+}
+
+/**
  * 拉取在线整合包清单(全部整合包由 dsh-plugin-pack 市场提供):market/index.json 列出
  * 各 pack,逐个拉取其 dsh-plugin-pack.json 并转换为 RecommendedBundle。网络失败回退内置。
  * 返回 bundles(远程在前 + 内置兜底)与 connected(是否成功连上在线库)。
  */
 export async function fetchRemoteBundles(): Promise<{ bundles: RecommendedBundle[]; connected: boolean }> {
   if (remoteBundlesCache !== null) {
-    return { bundles: packConnected ? remoteBundlesCache : RECOMMENDED_BUNDLES, connected: packConnected }
+    return { bundles: withLocalOnlyBundles(packConnected ? remoteBundlesCache : RECOMMENDED_BUNDLES), connected: packConnected }
   }
   remoteBundlesCache = []
   packConnected = false
@@ -1576,7 +1591,7 @@ export async function fetchRemoteBundles(): Promise<{ bundles: RecommendedBundle
     remoteBundlesCache = [] // 网络失败 → 只用内置
   }
   // 连接成功:整合包完全由在线库提供(不含内置);离线/失败:回退内置。
-  return { bundles: packConnected ? remoteBundlesCache : RECOMMENDED_BUNDLES, connected: packConnected }
+  return { bundles: withLocalOnlyBundles(packConnected ? remoteBundlesCache : RECOMMENDED_BUNDLES), connected: packConnected }
 }
 
 export async function installBundle(
@@ -1626,7 +1641,9 @@ export async function installBundle(
           description: bundle.description,
           // 整合包实例的数据目录:下载弹窗里选的共享目标 home,或全新独立 DSH_HOME。
           homeMode: options?.homeMode,
-          home: options?.homeMode === 'shared' ? options?.home : undefined
+          home: options?.homeMode === 'shared' ? options?.home : undefined,
+          // 学习整合包:新实例直接以学习模式启动(DSH_LAUNCHER_MODE=learning)。
+          launcherMode: bundle.launcherMode
         })
         inst = cfg.instances[cfg.instances.length - 1]
       }

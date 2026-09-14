@@ -100,6 +100,7 @@ interface InstanceForm {
   port: number
   autoStart: boolean
   enabled: boolean
+  launcherMode: 'normal' | 'learning'
 }
 
 /** Full editor for one instance, opened by clicking its card. Two tabs: settings / enabled plugins. */
@@ -111,7 +112,8 @@ function EditInstanceModal({ inst, onClose }: { inst: DshInstance; onClose: () =
     description: inst.description ?? '',
     port: inst.port,
     autoStart: inst.autoStart,
-    enabled: inst.enabled !== false
+    enabled: inst.enabled !== false,
+    launcherMode: inst.launcherMode === 'learning' ? 'learning' : 'normal'
   })
   const [busy, setBusy] = useState<string | null>(null)
   const [tab, setTab] = useState<'settings' | 'plugins'>('settings')
@@ -134,7 +136,8 @@ function EditInstanceModal({ inst, onClose }: { inst: DshInstance; onClose: () =
         description: form.description ?? '',
         port: Number(form.port) || 0,
         autoStart: form.autoStart,
-        enabled: form.enabled !== false
+        enabled: form.enabled !== false,
+        launcherMode: form.launcherMode
       })
       await refresh()
       onClose()
@@ -265,6 +268,49 @@ function EditInstanceModal({ inst, onClose }: { inst: DshInstance; onClose: () =
               <span>{t('instances.show')}</span>
               <Toggle checked={form.enabled} onChange={(v) => set('enabled', v)} />
             </label>
+          </div>
+
+          {/* 启动模式:普通 / 学习。学习模式注入 DSH_LAUNCHER_MODE=learning,
+              供配套的学习类插件与预设识别。切换后需重启实例生效。 */}
+          <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+            <label className="label">{t('instances.launcherMode')}</label>
+            <div className="flex gap-2">
+              {(
+                [
+                  ['normal', t('instances.modeNormal')],
+                  ['learning', t('instances.modeLearning')]
+                ] as const
+              ).map(([mode, label]) => {
+                const on = form.launcherMode === mode
+                return (
+                  <button
+                    key={mode}
+                    type="button"
+                    className="btn btn-sm flex-1"
+                    style={
+                      on
+                        ? {
+                            background: mode === 'learning' ? 'color-mix(in srgb, var(--ok) 18%, transparent)' : 'var(--accent-soft)',
+                            color: mode === 'learning' ? 'var(--ok)' : 'var(--accent)',
+                            borderColor: mode === 'learning' ? 'var(--ok)' : 'var(--accent)'
+                          }
+                        : undefined
+                    }
+                    onClick={() => set('launcherMode', mode)}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--muted)' }}>
+              {t('instances.learningHint')}
+            </p>
+            {form.launcherMode !== (inst.launcherMode === 'learning' ? 'learning' : 'normal') && (
+              <p className="text-[11px]" style={{ color: 'var(--warn)' }}>
+                {t('instances.modeRestartHint')}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
@@ -497,7 +543,8 @@ function NewInstanceModal({ onClose }: { onClose: () => void }): JSX.Element {
     port: 0,
     autoStart: false,
     homeMode: 'shared' as 'shared' | 'isolated',
-    home: ''
+    home: '',
+    launcherMode: 'normal' as 'normal' | 'learning'
   })
   // 默认共享到全局 home(现状行为);config 到达后补一次初值。
   useEffect(() => {
@@ -525,7 +572,8 @@ function NewInstanceModal({ onClose }: { onClose: () => void }): JSX.Element {
         port: Number(form.port) || 0,
         autoStart: form.autoStart,
         homeMode: form.homeMode,
-        home: form.homeMode === 'shared' ? form.home : undefined
+        home: form.homeMode === 'shared' ? form.home : undefined,
+        launcherMode: form.launcherMode
       })
       await refresh()
       onClose()
@@ -573,6 +621,43 @@ function NewInstanceModal({ onClose }: { onClose: () => void }): JSX.Element {
         <Toggle checked={form.autoStart} onChange={(v) => setForm((f) => ({ ...f, autoStart: v }))} />
         {t('settings.instanceAutoStart')}
       </label>
+
+      {/* 启动模式:普通 / 学习 */}
+      <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+        <label className="label">{t('instances.launcherMode')}</label>
+        <div className="flex gap-2">
+          {(
+            [
+              ['normal', t('instances.modeNormal')],
+              ['learning', t('instances.modeLearning')]
+            ] as const
+          ).map(([mode, label]) => {
+            const on = form.launcherMode === mode
+            return (
+              <button
+                key={mode}
+                type="button"
+                className="btn btn-sm flex-1"
+                style={
+                  on
+                    ? {
+                        background: mode === 'learning' ? 'color-mix(in srgb, var(--ok) 18%, transparent)' : 'var(--accent-soft)',
+                        color: mode === 'learning' ? 'var(--ok)' : 'var(--accent)',
+                        borderColor: mode === 'learning' ? 'var(--ok)' : 'var(--accent)'
+                      }
+                    : undefined
+                }
+                onClick={() => setForm((f) => ({ ...f, launcherMode: mode }))}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-[11px] leading-relaxed" style={{ color: 'var(--muted)' }}>
+          {t('instances.learningHint')}
+        </p>
+      </div>
 
       {/* 数据目录:共享到某个已有 home(下拉选择目标),或独立(全新 DSH_HOME,完全隔离) */}
       <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--border)' }}>
@@ -810,6 +895,14 @@ function InstanceCard({ inst, onOpen }: { inst: DshInstance; onOpen: () => void 
         <div className="flex min-w-0 items-center gap-2">
           <span className="badge-dot shrink-0" style={{ background: statusColor(st) }} />
           <span className="truncate text-[13px] font-semibold">{inst.name}</span>
+          {inst.launcherMode === 'learning' && (
+            <span
+              className="badge shrink-0"
+              style={{ color: 'var(--ok)', background: 'color-mix(in srgb, var(--ok) 14%, transparent)' }}
+            >
+              {t('instances.learningBadge')}
+            </span>
+          )}
           {hidden && (
             <span
               className="badge shrink-0"

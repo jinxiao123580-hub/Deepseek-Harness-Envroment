@@ -285,14 +285,23 @@ function launchPlan(cfg: LauncherConfig, inst: DshInstance): LaunchPlan {
       cmd: node,
       args: inner,
       cwd: ensureWorkspace(inst),
-      envPatch: { ...bundledEnv(), DSH_HOME: home, DSH_AUDIT_PROFILE: inst.profile || 'web' }
+      envPatch: {
+        ...bundledEnv(),
+        DSH_HOME: home,
+        DSH_AUDIT_PROFILE: inst.profile || 'web',
+        ...(inst.launcherMode === 'learning' ? { DSH_LAUNCHER_MODE: 'learning' } : {})
+      }
     }
   }
   return {
     cmd: cfg.nodePath,
     args: resolveScriptArgs(inner, cfg.harnessRepo),
     cwd: ensureWorkspace(inst),
-    envPatch: { DSH_HOME: home, DSH_AUDIT_PROFILE: inst.profile || 'web' }
+    envPatch: {
+      DSH_HOME: home,
+      DSH_AUDIT_PROFILE: inst.profile || 'web',
+      ...(inst.launcherMode === 'learning' ? { DSH_LAUNCHER_MODE: 'learning' } : {})
+    }
   }
 }
 
@@ -400,6 +409,9 @@ async function startInstanceInner(inst: DshInstance, rt: Runtime): Promise<{ ok:
     lastError: null
   })
   pushLine(rt, 'stderr', t(`[launcher] 启动 dsh profile "${inst.profile}" (${cfg.installMode === 'bundled' ? '内置运行环境' : '源码版'})`, `[launcher] Starting dsh profile "${inst.profile}" (${cfg.installMode === 'bundled' ? 'bundled runtime' : 'source build'})`))
+  if (inst.launcherMode === 'learning') {
+    pushLine(rt, 'stderr', t('[launcher] 学习模式已启用 (DSH_LAUNCHER_MODE=learning)', '[launcher] Learning mode enabled (DSH_LAUNCHER_MODE=learning)'))
+  }
   pushLine(rt, 'stderr', `[launcher] DSH_HOME=${home}`)
   pushLine(rt, 'stderr', `[launcher] ${plan.cmd} ${plan.args.join(' ')}`)
 
