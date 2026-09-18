@@ -1,0 +1,50 @@
+# DSH 成本治理配置片段（2026-09-18 实测生效）
+#
+# 用法：把下面各段合并进 ~/.dsh/settings.yaml（用户设置层，即时生效，无需重启）。
+# 顶层 key 就是插件名；未列出的字段沿用插件默认值。
+#
+# 依据：字段名与约束均从插件源码读出
+#   dsh-spill-policy/lib/index.js        Config = z.object({ maxInlineBytes: z.number() })
+#   dsh-compaction-basic/lib/index.js    thresholdRatioSchema = z.number()
+#                                        DEFAULT_THRESHOLD_RATIO = .8
+#                                        DEFAULT_RETAIN_RATIO = .16
+#                                        校验：retainRatio < thresholdRatio，否则 throw
+#                                        auto 默认 true
+# ---------------------------------------------------------------------------
+
+# ① 推理强度：high -> medium
+#    实测 reasoningTokens 占 outputTokens 的 52%，是纯输出放大项。
+#    需要深度分析时改回 high。
+agent-default-model:
+  reasoningEffort: medium
+
+# ② 超大工具输出落盘
+#    未配置 maxInlineBytes 时该插件【不注册任何东西】= true no-op，
+#    所有网页抓取 / bash 输出 / 子代理报告都整段永久驻留上下文，并被之后每一轮重复计费。
+#    8 KB 与社区/厂商常用阈值同量级。
+#
+#    行为：超出后全文存到会话级 spill 产物，模型只看到
+#          "头尾预览 + 落盘路径 + 取回提示"。
+#    例外：read 工具被刻意排除（防 read → spill → read again 死循环），
+#          所以读大文件仍须调用方自觉用 offset/limit/grep 控制。
+spill-policy:
+  maxInlineBytes: 8192
+
+# ③ 压缩阈值：0.8 -> 0.35
+#    触发点 thresholdTokens = floor(contextWindow × thresholdRatio)。
+#    deepseek-v4-flash 的 contextWindow = 1024000：
+#      0.8  → 819200 token 才压缩（太晚）
+#      0.35 → 358400 token（仍远高于日常需要，不干扰正常长任务）
+#    retainRatio 保持默认 0.16 < 0.35，满足校验。
+compaction-basic:
+  thresholdRatio: 0.35
+
+# ---------------------------------------------------------------------------
+# 相关但无需改动的插件（本来就在跑）：
+#   token-meter                  计量
+#   tool-result-pruner           阈值 8192 字符，但【只在压缩阶段生效】
+#   spill-local / spill / 存储后端
+#   command-compact              提供 /compact 手动压缩命令
+#
+# 最立竿见影的一步：长会话里直接敲 /compact。
+# ---------------------------------------------------------------------------
