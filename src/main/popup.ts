@@ -12,7 +12,7 @@ import { app, BrowserWindow, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { broadcast, getWindow, onEvent } from './bus'
-import { getState } from './harness'
+import { getInstanceAuthUrl, getState } from './harness'
 import { getInstance } from './instances'
 
 const popups = new Map<string, BrowserWindow>()
@@ -67,7 +67,10 @@ export function openInstanceWindow(instanceId: string): void {
     void shell.openExternal(url)
     return { action: 'deny' }
   })
-  void win.loadURL(`http://127.0.0.1:${st.port}`)
+  // 新版 dsh(>= 0.1.5-rc.2)给 Web UI 加了启动令牌:根路径不带 /?token=<launchToken>
+  // 一律 401(正文 "dsh web authentication required; reopen the URL printed by dsh web.")。
+  // 优先用主进程从 dsh 启动日志里抓到的认证 URL,拿不到才回退裸地址(旧版 dsh 无认证)。
+  void win.loadURL(getInstanceAuthUrl(instanceId) ?? `http://127.0.0.1:${st.port}`)
   win.on('closed', () => {
     if (popups.get(instanceId) === win) popups.delete(instanceId)
     // Closing the separate window (by hand or from the toggle button) pops the

@@ -9,7 +9,7 @@
 // content view, so keyboard focus and IME work natively.
 
 import { BrowserWindow, shell, WebContentsView, type WebContents } from 'electron'
-import { consumeInstanceAuthUrl, getInstanceAuthUrl, getState, onInstanceAuthUrl } from './harness'
+import { clearInstanceAuthUrl, getInstanceAuthUrl, getState, onInstanceAuthUrl } from './harness'
 import { broadcast } from './bus'
 
 const SIDEBAR_EXPANDED = 212
@@ -137,12 +137,11 @@ export function registerDshView(host: BrowserWindow): void {
   webIdleTimer = setInterval(sweepWebIdle, WEB_IDLE_SWEEP_MS)
   // 新版 dsh 认证 token 到达时,若该实例是活动视图,用带 token 的 URL 重载
   // (否则内嵌视图加载的是基础 URL,会 401「authentication required」)。
+  // token 不销毁:同进程内可反复使用,popup / 「在浏览器打开」还要复用它。
   onInstanceAuthUrl((id, url) => {
     if (active && id === activeId && win) {
       const v = views.get(id)
-      if (v) {
-        void v.webContents.loadURL(url).then(() => consumeInstanceAuthUrl(id)).catch(() => {})
-      }
+      if (v) void v.webContents.loadURL(url).catch(() => {})
     }
   })
   host.on('closed', () => {
@@ -190,11 +189,10 @@ export function setDshActive(instanceId: string, next: boolean, reload?: boolean
         loaded.add(instanceId)
         const port = getState(instanceId).port
         // 新版 dsh 认证:优先加载带 launchToken 的认证 URL(主进程持有),否则回退基础 URL。
-        // token 用后即毁:加载成功(种 cookie)后销毁;全部退出时 dsh 必停,下次新 token。
-        const authUrl = getInstanceAuthUrl(instanceId)
+        // 这里不能销毁该 URL —— 独立窗口弹窗与「在浏览器打开」还要用同一个 token URL。
         if (port > 0) {
-          const p = v.webContents.loadURL(authUrl ?? `http://127.0.0.1:${port}`)
-          if (authUrl) void p.then(() => consumeInstanceAuthUrl(instanceId)).catch(() => { /* 失败保留 */ })
+          const authUrl = getInstanceAuthUrl(instanceId)
+          void v.webContents.loadURL(authUrl ?? `http://127.0.0.1:${port}`)
         }
       }
     }
@@ -361,8 +359,8 @@ export function releaseWebChat(chatId: string): void {
  * 时残留的 activeId 指向已删除实例。
  */
 export function removeDshView(instanceId: string): void {
-  // 实例删除时一并清理认证 token。
-  consumeInstanceAuthUrl(instanceId)
+  // 实例删除时一并清理认证 URL。
+  clearInstanceAuthUrl(instanceId)
   destroyView(instanceId)
 }
 

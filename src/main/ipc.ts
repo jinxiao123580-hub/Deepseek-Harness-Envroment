@@ -68,7 +68,9 @@ export function registerIpc(): void {
     if (port <= 0) return false
     // 记录「用户手动打开」:浏览器守卫会跳过该端口,不会自动关闭它。
     browserGuard.markUserOpened(port)
-    return shell.openExternal(`http://127.0.0.1:${port}`)
+    // 新版 dsh(>= 0.1.5-rc.2)的 Web UI 需要 /?token=<launchToken>,否则 401。带 token 打开
+    // 会 303 到干净的 / 并种下签名 cookie(authority 绑定,默认 30 天),此后再开裸地址也能进。
+    return shell.openExternal(harness.getInstanceAuthUrl(id) ?? `http://127.0.0.1:${port}`)
   })
   ipcMain.handle('harness:openInstanceWindow', (_e, instanceId: string) => {
     // Open (or focus) the instance's DSH UI in a launcher child window.

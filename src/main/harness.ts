@@ -152,11 +152,16 @@ export function getInstanceAuthUrl(id: string): string | undefined {
   return authUrls.get(id)
 }
 
-/** 取走并销毁实例的认证 URL。安全:全部退出时 dsh 必停,下次启动是新 token,销毁无风险。 */
-export function consumeInstanceAuthUrl(id: string): string | undefined {
-  const url = authUrls.get(id)
+/**
+ * 清掉实例的认证 URL(进程退出 / 实例删除时调用)。token 是按进程生成的,进程一死即失效。
+ *
+ * 注意:不要在「用过一次」之后删。dsh 的校验只是拿请求里的 token 和本进程 launchToken
+ * 做比对(BrowserAuth.authorizeIndex),不会烧毁 token,同一进程内可反复使用 —— 而独立
+ * 窗口(popup.ts)和「在浏览器打开」(ipc.ts)都要复用这同一个 URL,提前删掉它们就只能
+ * 回退裸地址,直接吃 401「dsh web authentication required」。
+ */
+export function clearInstanceAuthUrl(id: string): void {
   authUrls.delete(id)
-  return url
 }
 
 
@@ -452,7 +457,7 @@ async function startInstanceInner(inst: DshInstance, rt: Runtime): Promise<{ ok:
     }
     pushLine(rt, 'stderr', t(`[launcher] 进程退出 code=${code ?? 'null'} signal=${signal ?? 'none'}`, `[launcher] Process exited code=${code ?? 'null'} signal=${signal ?? 'none'}`))
     // 进程退出即清掉认证 token:避免重启后、新 token 到达前用到旧(死进程)token。
-    authUrls.delete(rt.instanceId)
+    clearInstanceAuthUrl(rt.instanceId)
     rt.child = null
     stopPortProbe(rt)
     clearStartTimer(rt)
