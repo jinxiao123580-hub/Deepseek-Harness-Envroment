@@ -10,6 +10,57 @@
 > 合并过程中发现的问题、改进与 Windows/Ubuntu 差异，全部记在
 > **[`docs/改进与问题记录.md`](docs/改进与问题记录.md)** —— 部署前请先读它。
 
+## ⚠️ 本仓库的验证基准（读任何结论前先看这里）
+
+| 项 | 值 |
+|---|---|
+| DSH | **`0.1.5-rc.2`**（= `npm dist-tags` 的 `latest` 与 `next`） |
+| pi-ai（模型目录） | **`0.85.1`** |
+| 核查日期 | 2026-09-19 |
+| 平台 | Windows 11，ANSI 代码页 **936**，Node `v24.18.0`，npm `11.16.0` |
+
+**为什么必须写这一栏**：DSH 走的是 `-rc` / `-alpha` 流水线
+（当日 `alpha` 已是 `0.1.6-alpha.2`），而本仓库大量结论是从**源码行**读出来的。
+源码会变，**一句"适配器只接受 X/Y/Z"过几个版本就可能变成假话，且没有任何机制提醒你**。
+`docs/改进与问题记录.md` §9 记录了这个坑的完整实例：档位集合其实**按模型**而定，
+旧文档把某个模型的档位写成了全局事实，结果与本机实际运行值直接矛盾。
+
+**核对方法**（任一结论失效时先跑这几条）：
+
+```powershell
+# ① 本机 dsh 版本（下面这条实测可用）
+npm ls -g @deepseek-ai/dsh --depth=0
+# ② 是否已有新版
+npm view @deepseek-ai/dsh dist-tags --json
+# ③ 【最有用的一条】当前配的档位到底合不合法
+node tools/show-effort-levels.mjs --current
+# ④ 查任意模型能用哪些档位
+node tools/show-effort-levels.mjs zai glm-5.3
+node tools/show-effort-levels.mjs zai glm-5.2
+```
+
+> ⚠️ **不要用 `node -e "require('$env:APPDATA/...')"` 这种写法**（本 README 早先版本真的这么写过，
+> 实测是坏的）：PowerShell 把 `$env:APPDATA` 里的反斜杠喂给原生程序时会吞掉，
+> node 收到 `C:Users905AppDataRoaming` → `MODULE_NOT_FOUND`。
+> 所以上面用 `tools/show-effort-levels.mjs` 这个**跨平台、无第三方依赖**的脚本代替，
+> 它自己会定位 npm 全局根目录与 pi-ai 模型目录。
+>
+> 该脚本的实测输出（本机）：
+> ```
+> node tools/show-effort-levels.mjs --current
+>   provider  : zai
+>   model     : glm-5.3
+>   effort    : low
+>   可用档位  : low / high / max
+>   thinkingLevelMap = {"off":null,"minimal":null,"low":"low","medium":null,"high":"high","xhigh":null,"max":"max"}
+>   ✅ 合法：low 在该模型的能力表里
+> ```
+> 把 effort 改成 `off` 或 `medium` 会得到 `❌ 非法 … UNSUPPORTED_REASONING_EFFORT` 且退出码 1
+> （这是**反例测试**，已实测；两者都在 `glm-5.3` 上不可用）。
+
+从"当前安装的 dsh"派生的产物都带版本指纹（`presets/standard-leash/SOURCE.txt`），
+升级后跑 `node tools/regen-standard-leash.mjs --check` 即可发现漂移。
+
 ---
 
 ## 一句话结论（2026-09-19 修正版）
@@ -106,8 +157,11 @@ compaction-acp:
   modelContextLimit: 250000
   autoModelContextLimit: false
 
-# ③ ⚠️ 不要写 reasoningEffort: medium —— 适配器只接受 off/high/max，
-#    medium 会抛 UNSUPPORTED_REASONING_EFFORT，而 high 本来就是默认档（写它 = no-op）
+# ③ ⚠️ reasoningEffort 的合法档位是【按模型】声明的，没有全局档位表。
+#    medium 在所有已知模型上都不合法（抛 UNSUPPORTED_REASONING_EFFORT），
+#    但"能选哪几档"取决于模型目录里的 thinkingLevelMap（null = 不可用）：
+#       glm-5.2 → off / high / max        glm-5.3 → low / high / max（**没有 off**）
+#    详见 config/settings.cost.yaml §③ 与 docs/改进与问题记录.md §9。
 ```
 
 > **【2026-09-19 更正】** 本 README 旧版写的是 `thresholdRatio: 0.35`，理由是
@@ -126,8 +180,16 @@ compaction-acp:
 
 ## 三条最容易踩的坑（都踩过）
 
-1. **`reasoningEffort: medium` 是非法的** —— DeepSeek 适配器只放行 `off`/`high`/`max`（源码白名单），
-   `medium` 只是 API 侧的 `high` 别名。想"降智省钱"只有 `off` 这一个真实选项。
+1. **`reasoningEffort` 的合法档位是【按模型】算的 —— 别把某个模型的档位当成适配器事实。**
+   `medium` 在所有已知模型上都不合法（API 侧它只是 `high` 的别名）。
+   但"这模型能用哪几档"来自模型目录里的 `thinkingLevelMap`，其中 **`null` = 该档位不可用**。
+   实测（pi-ai 0.85.1，随 dsh 0.1.5-rc.2 安装）：
+   `glm-5.2` → `off`/`high`/`max`；**`glm-5.3` → `low`/`high`/`max`，没有 `off`**。
+   ⇒ 下一条"执行型会话用 `off`"**在 glm-5.3 上根本做不到**，最低只能到 `low`；
+   想要 `off` 得换 glm-5.2 或 DeepSeek 线。DeepSeek 原生适配器自己的白名单是
+   `off`/`low`/`high`/`max`（不是旧版文档写的 `off`/`high`/`max`）。
+   详见 [`docs/改进与问题记录.md`](docs/改进与问题记录.md) §9 与
+   [`config/settings.cost.yaml`](config/settings.cost.yaml) §③。
 2. **换档会打断前缀缓存** —— effort 被注入为 prompt 的**第 0 个 system block**，
    所以每个档位是独立缓存谱系：某档位在会话里**首次出现 = 一次全冷**（实测 hit=0、耗时 23.4 s vs 命中 0.6 s）。
    **换档只在会话边界做。**

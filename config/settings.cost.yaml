@@ -10,7 +10,10 @@
 #                                        DEFAULT_RETAIN_RATIO = .16
 #                                        校验：retainRatio < thresholdRatio，否则 throw
 #                                        auto 默认 true
-#   dsh-llm-deepseek/lib/index.js        reasoningEffort 只接受 "off" | "high" | "max"
+#   dsh-llm-deepseek/lib/index.js        reasoningEffort 白名单 "off" | "low" | "high" | "max"
+#   @earendil-works/pi-ai/dist/providers/data/*.json
+#                                        每个模型自己的 thinkingLevelMap（null = 该档位不可用）
+#                                        ⚠️ 合法的档位是【按模型】算的，没有全局档位表 —— 见 §③
 # ---------------------------------------------------------------------------
 
 # ① 超大工具输出落盘
@@ -36,16 +39,31 @@ spill-policy:
 compaction-basic:
   thresholdRatio: 0.35
 
-# ③ 推理档位 —— ⚠️ 2026-09-19 更正：不要写 medium
-#    DeepSeek 适配器只接受 off / high / max（medium 会抛 UNSUPPORTED_REASONING_EFFORT）。
-#    而且 high 本来就是默认档，下面这行写与不写等价。
+# ③ 推理档位 —— ⚠️ 2026-09-19 更正（重要）：合法档位是【按模型】算的
+#    旧版这里写"DeepSeek 适配器只接受 off / high / max"，并把它当成全局事实。
+#    **这是把某个模型的档位当成了适配器的档位。** 实际有两层：
+#      · 适配器层：dsh-llm-deepseek/lib/index.js:28 的白名单是
+#          off | low | high | max   （medium/minimal/xhigh 会抛 UNSUPPORTED_REASONING_EFFORT）
+#      · 模型层（真正决定你能选什么）：pi-ai 目录里每个模型的 thinkingLevelMap，
+#          **null = 该档位不可用**。证据：dsh-llm-pi-ai 的消费端写的是
+#          `if (model.thinkingLevelMap?.off !== null) { ... }`，即 off 为 null 就没法关思考。
+#    实测本机目录（@earendil-works/pi-ai 0.85.1，随 dsh 0.1.5-rc.2 安装）：
+#      glm-5.2  {"off":"none","minimal":null,"low":null,"medium":null,"high":"high","xhigh":null,"max":"max"}
+#               → 可用 off / high / max        ← 旧版文档描述的其实是这一个
+#      glm-5.3  {"off":null,"minimal":null,"low":"low","medium":null,"high":"high","xhigh":null,"max":"max"}
+#               → 可用 low / high / max        ← **没有 off**
+#    ⇒ **"执行型会话用 off" 这条在 glm-5.3 上无法执行**，最低只能到 low；
+#      想要 off 就换 glm-5.2 或 DeepSeek 线。`medium` 在任何模型上都不合法。
+#    还有一点：high 本来就是默认档，写它等于没写。
 #    正确用法（详见 handoff/README.md §6 与 docs/交接体系.md §6）：
-#      · 执行型会话：off（关思考，实测同一道多步题只需 1 个输出 token）
+#      · 执行型会话：off（关思考，实测同一道多步题只需 1 个输出 token）—— 若模型支持
 #      · 决策/反思型会话：high
 #      · 难题：max（必须显式压 max_tokens，该档默认抬到 128K）
 #      · 换档只在会话边界做（每个档位是独立缓存谱系；长上下文里首次启用 = 一次全冷 ¥0.5 + 20s）
 agent-default-model:
   reasoningEffort: high          # 默认档；写它=no-op，保留只为显式
+  # 注意：这个字段在配置层的 schema 是 z.string()（dsh-agent-default-model/lib/index.js:16），
+  # 写什么都不报错；非法值要到**发请求时**才按该模型的能力表抛 UNSUPPORTED_REASONING_EFFORT。
 
 # ---------------------------------------------------------------------------
 # 相关但无需改动的插件（本来就在跑）：
