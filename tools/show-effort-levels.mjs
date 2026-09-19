@@ -198,17 +198,42 @@ function main() {
   if (pos.length === 1) list = list.filter((r) => r.provider === pos[0] || r.id === pos[0]);
   if (pos.length >= 2) list = list.filter((r) => r.provider === pos[0] && r.id === pos[1]);
 
-  if (!list.length) { console.error(`${LOG} 没有匹配的模型（试试不带参数列出全部）`); process.exit(1); }
-  if (asJson) { console.log(JSON.stringify(list.map((r) => ({ provider: r.provider, model: r.id, map: r.entry.thinkingLevelMap, levels: availableLevels(r.entry) })), null, 2)); return; }
+  // 原生路由不在 pi-ai 目录里，必须单独并进来 ——
+  // 否则刚说完"deepseek-official 支持 off/low/high/max"，
+  // 用户跑 `show-effort-levels.mjs deepseek-official` 却得到"没有匹配的模型"。
+  const nativeWanted = pos.length === 0 || NATIVE_ROUTES[pos[0]] !== undefined;
+  const nativeList = nativeWanted
+    ? Object.entries(NATIVE_ROUTES).filter(([p]) => pos.length < 2 || p === pos[0])
+    : [];
+
+  if (!list.length && !nativeList.length) {
+    console.error(`${LOG} 没有匹配的模型（试试不带参数列出全部）`);
+    process.exit(1);
+  }
+  if (asJson) {
+    console.log(JSON.stringify({
+      catalog: list.map((r) => ({ source: 'pi-ai-catalog', provider: r.provider, model: r.id, map: r.entry.thinkingLevelMap, levels: availableLevels(r.entry) })),
+      native: nativeList.map(([provider, nr]) => ({ source: 'native-route', provider, model: '(该路由下各模型一致)', levels: nr.levels, evidence: nr.source })),
+    }, null, 2));
+    return;
+  }
 
   console.log(`${LOG} 目录: ${dir}`);
-  console.log(`${LOG} 命中 ${list.length} 个模型（null = 该档位不可用）\n`);
+  console.log(`${LOG} pi-ai 目录命中 ${list.length} 个模型（null = 该档位不可用）\n`);
   for (const r of list) {
     const lv = availableLevels(r.entry);
     console.log(`  ${r.provider} / ${r.id}`);
     console.log(`    可用: ${lv.length ? lv.join(' / ') : '(无)'}`);
     if (r.entry.thinkingLevelMap) console.log(`    map : ${JSON.stringify(r.entry.thinkingLevelMap)}`);
     if (r.entry.contextWindow) console.log(`    窗口: ${r.entry.contextWindow}  maxTokens: ${r.entry.maxTokens ?? '?'}`);
+  }
+  if (nativeList.length) {
+    console.log(`\n${LOG} 原生路由（**不在** pi-ai 目录里，档位写死在库中）\n`);
+    for (const [provider, nr] of nativeList) {
+      console.log(`  ${provider}`);
+      console.log(`    可用: ${nr.levels.join(' / ')}`);
+      console.log(`    依据: ${nr.source}`);
+    }
   }
 }
 
