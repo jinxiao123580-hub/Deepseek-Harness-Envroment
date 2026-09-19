@@ -173,6 +173,7 @@ def main():
         total["cost"], total["req"], total["cost"] / max(1, total["req"])))
     lines.append("- 基线：2026-09-09~09-19 共 ¥%.0f / %d 天 = ¥%.1f/天；本窗口 ¥%.1f/天" % (
         BASELINE, BASELINE_DAYS, BASELINE / BASELINE_DAYS, total["cost"] / max(1, a.days)))
+    lines.append("  - ⚠️ 基线取自**另一台机器**（ubuntu-slave 的跨机记录），与本窗口**不同口径**，只用于看量级，不能相减")
     for k, v in by_class.most_common():
         lines.append("  - %s ¥%.2f（%.0f%%）" % (k, v, 100 * v / max(1e-9, total["cost"])))
     lines.append("- 按天：" + "，".join("%s ¥%.2f" % (d, per_day[d]) for d in sorted(per_day)))
@@ -185,6 +186,14 @@ def main():
     lines.append("- %d 个会话，共 ¥%.2f，单任务均 ¥%.2f" % (
         int(sub_tasks), sub_cost, sub_cost / max(1, sub_tasks)))
     lines.append("- delegationDepth 分布：%s（**depth≥2 应为 0**；出现即 `standard-leash` 未生效）" % dict(sorted(depth.items())))
+    lines.append("")
+    lines.append("> ⚠️ **回看日志的统计分不清「护栏装上之前的老账」和「现在还在漏」。**")
+    lines.append("> 本脚本窗口是历史日志（`--days N`）：护栏（`maxDepth`）哪天落地，窗口里就混着那之前的派发。")
+    lines.append("> ⇒ §6 的建议是**启发式**的，运行时间早于护栏落地时不能照抄；")
+    lines.append("> 判断「护栏**现在**有没有生效」必须用**当下的一次真实调用**做实验，不能靠这份统计。")
+    lines.append("> （2026-09-19 实测：Windows 本机全量窗口报 depth `{0: 79, 1: 32, 2: 1}`，")
+    lines.append("> 那个 depth 2 正是护栏落地前的旧账；护栏本身在同日的真实调用里已验证生效。）")
+    lines.append("> 同理，§5 的「步骤重复」横跨整个窗口，多半来自**未按交接规程**的早期会话，不是本套规程的 KPI。")
     lines.append("\n## 4. 交接\n")
     hs = handoff_dirs()
     lines.append("- `.handoff/` 下交接目录 %d 个；主会话 %d 个；最大上下文 %d tokens" % (
@@ -195,6 +204,7 @@ def main():
         lines.append("  - `%s` 之后 24h 主会话花费 ¥%.2f" % (name, c))
     lines.append("\n## 5. 步骤重复（同一会话内同一条 shell 命令 ≥3 次）\n")
     lines.append("- %d 处，涉及 %d 个会话（MAST 测得的头号失败模式，占 15.7%%）" % (repeats, repeat_sessions))
+    lines.append("  - 这条横跨整个窗口：其中多半是**未按交接规程**的早期会话留下的，不是本套规程的 KPI")
     lines.append("\n## 6. 建议\n")
     tips = []
     if cold_mid["n"]:
