@@ -20,7 +20,14 @@
 - [已否证] 旧版 INDEX 写的"新工具**现场** **7/7** 通过"是张冠李戴：7/7 属 `pose_advisor.py --self-test`（点动导航自检），见 `experiments/2026-09-18-标定问题汇总.md:101`
 - [有效] 状态读取器（真机验证）→ `scripts/read_arm_state.py`
 - [有效] 09-19 采到 1 个有效样本（角点 54/54、重投影 **RMS** 0.21 px，max 0.53）→ `outputs/handeye/eye-in-hand-20260919.json`
-- [有效] 成本治理：spill 8 KB + 压缩 0.35 已生效
+- [已否证] 旧版写的"成本治理：spill 8 KB + 压缩 0.35 已生效"**是错的**（2026-09-19 实查，两条都错）：
+  · `spill-policy` **从不读 settings 层**（源码里 `installSection` / `settings.register` /
+    `ctx.settings` **零命中**）→ settings.yaml 里的 8192 **没生效**，真实值来自
+    `dsh-base/cordis.patch.yml:383` = **50000**；
+  · `compaction-basic` 在 web profile 下被 `@deepseek-ai/dsh-web-app` 置 `disabled: true`
+    → 那条 0.35（配置里其实写的是 0.45）同样没生效。
+  真正生效的只有 ACP 的 `modelContextLimit`。依据：`docs/本地插件与治理融合.md` §2，
+  含 `dsh --profile web-3 --dump-config` 的原文。**这一条属于"附了路径但其实不成立"的反面教材。**
 - [已否证] 旧版写的"effort medium 生效"是错的：仍是 `high`；`medium` 对该适配器非法（只接受 `off`/`high`/`max`）
 
 ## 3. 未决

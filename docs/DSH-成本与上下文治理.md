@@ -9,9 +9,17 @@
 > 1. **§5 的 `reasoningEffort: medium` 是非法值**：DeepSeek 适配器只接受 `off`/`high`/`max`，写 `medium` 会在请求时抛 `UNSUPPORTED_REASONING_EFFORT`；而 `high` 本来就是默认档（写它 = no-op）。降本应改用 `off`（执行型会话）或按会话边界换档。
 > 2. **§3–§4 的"≈99.5%"是 token **数量**占比，不是账单占比**。按钱算三块几乎均分：缓存读 32% / 未命中输入 32% / 输出 36%（单价差 50–200 倍，所以 token 占比 ≠ 花费占比）。
 > 3. §9 的"子代理只回 ≤30 行"已收紧为 **≤10 行 + 正文写 `.handoff/reports/`**，并已用 preset 的 `persona` 结构化。
+> 4. **【比上面三条更根本】"写在哪一层"搞错了**：`settings.yaml` 的 section **只有插件主动调
+>    `settingsCtx.settings.installSection(ctx, NAMESPACE, SCHEMA, entry, …)` 才会进插件 config**，
+>    没接线的插件同名 section 会被**静静忽略**（不报错）。本机实测三个调优项只有 `compaction-acp` 生效：
+>    `spill-policy` 从不接线 ⇒ 下文 §5 的 `maxInlineBytes` 写进 settings.yaml **无效**，真实值来自
+>    `dsh-base/cordis.patch.yml:383`（**50000**，是意图值的 6.1 倍）；`compaction-basic` 在 web profile
+>    下被 `@deepseek-ai/dsh-web-app` 置 `disabled: true` ⇒ 下文 §5 的 `thresholdRatio` 同样**无效**。
+>    ⇒ 下文关于"字段依据"的部分**仍然正确**（那是插件自己的 Config schema），
+>    但**"这个字段该写在哪"以 [`本地插件与治理融合.md`](本地插件与治理融合.md) §2 为准**。
 >
 > 详见 [`2026-09-19-实测与更正.md`](2026-09-19-实测与更正.md) 与 [`交接体系.md`](交接体系.md)。
-> **本文其余部分仍然有效**：spill / compaction / tool-result-pruner 的字段依据、no-op 陷阱、以及 §6 的验证方法都经过复核。
+> **本文其余部分仍然有效**：tool-result-pruner 的字段依据、no-op 陷阱、以及 §6 的验证方法都经过复核。
 
 ---
 

@@ -100,6 +100,7 @@ node tools/show-effort-levels.mjs zai glm-5.2
 | [`docs/2026-09-19-实测与更正.md`](docs/2026-09-19-实测与更正.md) | 三条更正 + 档位真实值域 + 缓存谱系实测 + 扇出事故复盘 + 交接成本实测 + 成本解剖 |
 | [`docs/交接体系.md`](docs/交接体系.md) | 交接体系全景：为什么不用 compaction、INDEX 规范、成本模型、继任者纪律、档位规则 |
 | [`docs/DSH-成本与上下文治理.md`](docs/DSH-成本与上下文治理.md) | 2026-09-18 版：账目、四个放大器、spill/compaction 的**字段依据与验证方法**（文首有更正块） |
+| [`docs/本地插件与治理融合.md`](docs/本地插件与治理融合.md) | **2026-09-19 必读**：本机已装插件如何接管/绕过本套配置。含"护栏落在没加载的那一层""settings.yaml 只有插件主动接线才生效""`context_audit` 的盲区"三件事，以及活的 profile 判定与操作手册 |
 | [`handoff/`](handoff/) | 交接约定全文 + 术语表 + INDEX 模板 + ADR-0001 + `AGENTS.block.md`（可粘贴规则块） |
 | [`examples/`](examples/) | 脱敏真实样例 + 它演示的 **9 类交接文档病症** |
 | [`presets/standard-leash/`](presets/standard-leash/) | **禁递归 + 子代理降档 + persona** 的 preset（脚本生成，带来源指纹） |
@@ -141,37 +142,49 @@ bash install.sh
 
 ---
 
-## 三条立即生效的配置
+## 三个调优项 —— ⚠️ 其中**两个不在这一层生效**（2026-09-19 实查）
 
 ```yaml
-# ① 超大工具输出落盘（未配置 = true no-op，大输出整段进上下文，之后每轮重复付费）
+# ① 超大工具输出落盘。
+#    ⚠️ 下面这种写法【不生效】：spill-policy 只读 cordis config，**从不读 settings 层**
+#    （源码里 installSection / settings.register / ctx.settings 零命中）。
+#    真正生效的值来自 dsh-base/cordis.patch.yml:383 → maxInlineBytes: 50000。
+#    要改必须改 profile 的 cordis 层：~/.dsh/profiles/<profile>/cordis.patch.yml
 spill-policy:
-  maxInlineBytes: 8192
+  maxInlineBytes: 8192        # ← 死配置（留着仅作意图记录）
 
-# ② 压缩阈值：必须和 ACP 的 modelContextLimit 一起看，不能只抄一个数
-#    触发点 = floor(有效上下文窗口 × thresholdRatio)
-#    实测好的一对：modelContextLimit = 250000 且 thresholdRatio = 0.45（触发点 ≈ 112K）
+# ② 压缩阈值。⚠️ compaction-basic 在 web profile 下被 @deepseek-ai/dsh-web-app 关掉
+#    （dsh --profile web-3 --dump-config 里该条 disabled: true），所以下面这行也不生效。
+#    真正生效的是 ACP —— billion-context-dsh 自己把 settings 接线进了它的 config。
 compaction-basic:
-  thresholdRatio: 0.45
+  thresholdRatio: 0.45        # ← 在 web profile 下是死配置
 compaction-acp:
-  modelContextLimit: 250000
+  modelContextLimit: 250000   # ✅ 三个里唯一真正生效的
   autoModelContextLimit: false
 
 # ③ ⚠️ reasoningEffort 的合法档位是【按模型】声明的，没有全局档位表。
 #    medium 在所有已知模型上都不合法（抛 UNSUPPORTED_REASONING_EFFORT），
 #    但"能选哪几档"取决于模型目录里的 thinkingLevelMap（null = 不可用）：
 #       glm-5.2 → off / high / max        glm-5.3 → low / high / max（**没有 off**）
+#    deepseek-official（原生路由，档位不在目录里）→ off / low / high / max
 #    详见 config/settings.cost.yaml §③ 与 docs/改进与问题记录.md §9。
 ```
 
-> **【2026-09-19 更正】** 本 README 旧版写的是 `thresholdRatio: 0.35`，理由是
+> **【2026-09-19 更正 · 比阈值更根本的一条】**
+> `settings.yaml` 的 section **只有插件主动调用
+> `settingsCtx.settings.installSection(ctx, NAMESPACE, SCHEMA, entry, …)` 才会进插件 config。**
+> 没有接线的插件，同名 section 会被**静静忽略**（不报错）—— 这是最坏的一种失败方式。
+> 本机实测：三个调优项里只有 `compaction-acp` 真生效。
+> 完整证据、机制与修法见 [`docs/本地插件与治理融合.md`](docs/本地插件与治理融合.md) §2。
+>
+> **【2026-09-19 更正 · 阈值 0.35】** 本 README 旧版写的是 `thresholdRatio: 0.35`，理由是
 > "contextWindow 1024000 → 触发点 358K 而非 819K"。**那个前提值是错的**：本机实测真实
 > contextWindow = **1,000,000**，而且 ACP 的 `modelContextLimit` 一旦显式设成 250000，
 > 有效窗口就是 25 万而不是 100 万 —— 在这种配置下 `0.35` 与 `0.45` 的触发点分别是
-> 87.5K 与 112.5K，**两个数都不是 358K**。所以旧版那个"358K"是**基于错误窗口尺寸算出来的**，
-> 照抄会得到一个和预期完全不同的压缩频率。
-> **结论：阈值不能脱离窗口尺寸单独抄。** 先确认有效窗口，再定 ratio。
-> 详见 [`config/settings.cost.yaml`](config/settings.cost.yaml)。
+> 87.5K 与 112.5K，**两个数都不是 358K**。
+> **结论：阈值不能脱离窗口尺寸单独抄**；而且更根本的是——这个插件在 web profile 下压根没开。
+> 详见 [`config/settings.cost.yaml`](config/settings.cost.yaml) 与
+> [`docs/本地插件与治理融合.md`](docs/本地插件与治理融合.md)。
 
 另见 `config/settings.deepseek-cheap.yaml`（子代理专用"关思考"路由，实测 output=1 token）与
 `config/settings.preset.yaml`（让禁递归的 preset 成为默认）。

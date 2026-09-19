@@ -1,7 +1,21 @@
 # DSH 成本治理配置片段
 #
-# 用法：把下面各段合并进 ~/.dsh/settings.yaml（用户设置层，即时生效，无需重启）。
-# 顶层 key 就是插件名；未列出的字段沿用插件默认值。
+# ⚠️⚠️ 2026-09-19 重要更正：**"合并进 settings.yaml" 这个用法对下面 ① 和 ② 是无效的。**
+#   让 settings 进插件 config 的唯一途径，是插件自己调用
+#     settingsCtx.settings.installSection(ctx, NAMESPACE, SCHEMA, entry, hooks)
+#   没接线的插件，同名 section 会被**静静忽略**（不报错）—— 最坏的一种失败方式。
+#   实测本机 web-3 profile：
+#     spill-policy      从不接线（源码里 installSection/settings.register/ctx.settings 零命中）
+#                       ⇒ settings 里的 maxInlineBytes **无效**，真实值来自
+#                          dsh-base/cordis.patch.yml:383 = **50000**
+#     compaction-basic  web profile 下被 @deepseek-ai/dsh-web-app 置 **disabled: true**
+#                       ⇒ settings 里的 thresholdRatio 同样**无效**
+#     compaction-acp    ✅ 唯一真生效的（billion-context-dsh 自己接线，其 docstring 明说）
+#   所以：① 要改必须改 profile 的 cordis 层（~/.dsh/profiles/<profile>/cordis.patch.yml）；
+#        ② 更合理的做法是接受它在 web 下被关，把调优只放在 ACP 上，别维护两套阈值。
+#   完整证据与操作手册：docs/本地插件与治理融合.md
+#
+# 下面各段保留为**意图记录**。顶层 key 就是插件名；未列出的字段沿用插件默认值。
 #
 # 依据：字段名与约束均从插件源码读出
 #   dsh-spill-policy/lib/index.js        Config = z.object({ maxInlineBytes: z.number() })
@@ -21,19 +35,25 @@
 #    所有网页抓取 / bash 输出都整段永久驻留上下文，并被之后每一轮重复计费。
 #    行为：超出后全文存到会话级 spill 产物，模型只看到"头尾预览 + 落盘路径 + 取回提示"。
 #    例外：read 工具被刻意排除（防 read → spill → read again 死循环）。
-#    ⚠️ 2026-09-19 更正：本插件【只作用于工具结果】。子代理报告以 user/message
+#    ⚠️ 2026-09-19 更正（一）：本插件【只作用于工具结果】。子代理报告以 user/message
 #       （source: subagent-report）进来，【永不落盘】——实测一份 47,405 字符的报告
 #       整段驻留主上下文。对策在行为侧：presets/standard-leash 的 persona +
 #       handoff/README.md §5（报告写 .handoff/reports/，只回 ≤10 行）。
+#    ⚠️ 2026-09-19 更正（二）：**写在 settings.yaml 里不生效**（本插件不读 settings 层）。
+#       真实生效值是 cordis 层的 50000 —— 比下面这个 8192 大 6.1 倍，
+#       意味着 8 KB~50 KB 的输出仍整段留在上下文里、每轮重复计费。
 spill-policy:
   maxInlineBytes: 8192
 
 # ② 压缩阈值：0.8 -> 0.35
 #    触发点 thresholdTokens = floor(contextWindow × thresholdRatio)。
-#    deepseek-v4-flash 的 contextWindow = 1024000：
-#      0.8  → 819200 token 才压缩（太晚）
-#      0.35 → 358400 token（仍远高于日常需要）
-#    retainRatio 保持默认 0.16 < 0.35，满足校验。
+#    ⚠️ 2026-09-19 更正（一）：本机实测真实 contextWindow = **1,000,000**（不是 1024000），
+#       而且 ACP 的 modelContextLimit 一旦显式设成 250000，**有效窗口就是 25 万**。
+#       在 25 万窗口下 0.35 / 0.45 的触发点是 87.5K / 112.5K —— 都不是 358K。
+#       所以下面那个"358400"是**基于错误窗口尺寸算出来的**，不要照抄。
+#    ⚠️ 2026-09-19 更正（二）：**web profile 下本插件被 disabled: true**，
+#       所以这个键在当前环境里根本不参与压缩。真正生效的是 compaction-acp。
+#    retainRatio 保持默认 0.16 < 0.35，满足校验（否则插件在解析阶段 throw）。
 #    注：压缩是【原地重写历史】，会作废被改写位置之后的前缀缓存
 #        （Copilot 生产数据：命中率中位 −66%），所以它省钱但不如"交接"划算。
 compaction-basic:
@@ -54,6 +74,14 @@ compaction-basic:
 #               → 可用 low / high / max        ← **没有 off**
 #    ⇒ **"执行型会话用 off" 这条在 glm-5.3 上无法执行**，最低只能到 low；
 #      想要 off 就换 glm-5.2 或 DeepSeek 线。`medium` 在任何模型上都不合法。
+#    补：**DeepSeek 原生路由 `deepseek-official` 的档位不在目录里**，写死在库里
+#      （dsh-llm-deepseek/lib/index.js:1417 REASONING_EFFORTS）= off / low / high / max，
+#      四个模型（deepseek-flash / deepseek-v4-flash / deepseek-v4-pro /
+#      deepseek-v4-flash-vision-exp）统一如此，defaultEffort 回落到 high。
+#      ⇒ 想在规则 4 的意义上"执行型会话用 off"，走 DeepSeek 线最省事。
+#      ⚠️ 别和目录里的 provider `deepseek` 混：那个的 deepseek-v4-flash 只有 low/high/max，
+#         deepseek-v4-pro 只有 high/max，**都没有 off**。
+#      核查命令：node tools/show-effort-levels.mjs --current
 #    还有一点：high 本来就是默认档，写它等于没写。
 #    正确用法（详见 handoff/README.md §6 与 docs/交接体系.md §6）：
 #      · 执行型会话：off（关思考，实测同一道多步题只需 1 个输出 token）—— 若模型支持
@@ -66,12 +94,16 @@ agent-default-model:
   # 写什么都不报错；非法值要到**发请求时**才按该模型的能力表抛 UNSUPPORTED_REASONING_EFFORT。
 
 # ---------------------------------------------------------------------------
-# 相关但无需改动的插件（本来就在跑）：
-#   token-meter                  计量
-#   tool-result-pruner           阈值 8192 字符，但【只在压缩阶段生效】
-#   spill-local / spill / 存储后端
-#   command-compact              提供 /compact 手动压缩命令
+# 相关插件 —— ⚠️ 旧版这里写"本来就在跑"，**实测不成立**（web-3 的 dump 为证）：
+#   token-meter                  计量              —— 在跑
+#   tool-result-pruner           阈值 8192 字符    —— **disabled: true**（web-3）
+#   command-compact              提供 /compact     —— **disabled: true**（web-3）
+#   spill-local / spill / 存储后端                 —— 在跑
+#   compaction-basic             阈值压缩          —— **disabled: true**（web-3）
+#   compaction-acp = billion-context-dsh          —— **web-3 唯一在跑的压缩后端**
+#   查法：dsh --profile <name> --dump-config | Select-String 'disabled' -Context 2,4
 #
 # 另见：settings.deepseek-cheap.yaml（子代理专用"关思考"路由）
 #      settings.preset.yaml（禁递归 + 子代理降档的 preset 开关）
+#      docs/本地插件与治理融合.md（本地插件如何接管/绕过本套配置的权威记录）
 # ---------------------------------------------------------------------------
