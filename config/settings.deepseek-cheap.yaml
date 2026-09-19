@@ -1,0 +1,34 @@
+# 子代理专用路由：同一个 DeepSeek key，但默认关掉思考
+#
+# 为什么需要单独一条路由：`reasoningEffort` 是 DSH 里【唯一没有 per-agent 配置路径】的旋钮
+# （AgentOptions 只有 {provider, model, maxTokens}）。所以"让子代理不思考"只能靠
+# "换一条默认档位为 off 的路由"，再在 preset 里把 tool-subagent 指过来。
+#
+# 语义已逐行核对 dsh-llm-pi-ai 与 pi-ai 源码：
+#   1) baseURL 含 deepseek.com → compat.thinkingFormat 自动为 "deepseek"
+#   2) 模型必须声明 reasoningEfforts，否则 model.reasoning=false → 整段 thinking 逻辑不生效
+#   3) ⚠️ off 必须显式写成 null：省略 off 会让 thinkingLevelMap.off === null，
+#      即"什么都不发" → 而 DeepSeek 端默认是 thinking 开启 + high，等于白配（最阴的坑）
+#   4) 路由级 reasoning: "off" → profileOptions 丢弃 reasoning → 方言发
+#      thinking: {type: "disabled"}（实测：output 1 token、无 reasoningTokens 字段）
+#
+# 合并进 ~/.dsh/settings.yaml 的 llm-pi-ai.providers 下（与其它 provider 并列）。
+# 不声明 low：本机不使用低档。
+llm-pi-ai:
+  providers:
+    deepseek-cheap:
+      displayName: DeepSeek Flash (thinking off · 子代理)
+      apiKeyEnv: DEEPSEEK_API_KEY
+      api: openai-completions
+      baseURL: https://api.deepseek.com
+      reasoning: "off"
+      models:
+        - id: deepseek-flash
+          name: DeepSeek V4.1 Flash (no thinking)
+          contextWindow: 1000000
+          maxTokens: 128000
+          input: [ text ]
+          reasoningEfforts:
+            "off": null
+            "high": high
+            "max": max

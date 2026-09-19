@@ -5,6 +5,14 @@
 
 日期：2026-09-18 · 环境：Ubuntu 22.04，DSH `@deepseek-ai/dsh`，模型 `deepseek-v4-flash`
 
+> **⚠️ 2026-09-19 更正（先读这段）**
+> 1. **§5 的 `reasoningEffort: medium` 是非法值**：DeepSeek 适配器只接受 `off`/`high`/`max`，写 `medium` 会在请求时抛 `UNSUPPORTED_REASONING_EFFORT`；而 `high` 本来就是默认档（写它 = no-op）。降本应改用 `off`（执行型会话）或按会话边界换档。
+> 2. **§3–§4 的"≈99.5%"是 token **数量**占比，不是账单占比**。按钱算三块几乎均分：缓存读 32% / 未命中输入 32% / 输出 36%（单价差 50–200 倍，所以 token 占比 ≠ 花费占比）。
+> 3. §9 的"子代理只回 ≤30 行"已收紧为 **≤10 行 + 正文写 `.handoff/reports/`**，并已用 preset 的 `persona` 结构化。
+>
+> 详见 [`2026-09-19-实测与更正.md`](2026-09-19-实测与更正.md) 与 [`交接体系.md`](交接体系.md)。
+> **本文其余部分仍然有效**：spill / compaction / tool-result-pruner 的字段依据、no-op 陷阱、以及 §6 的验证方法都经过复核。
+
 ---
 
 ## 1. 症状
@@ -54,7 +62,7 @@ zstdcat "$F" | grep -o '"cacheReadTokens":[0-9]*' | awk -F: 'NR%40==1 {printf "�
 
 | 项目 | 数值 | 占比 |
 |---|---:|---:|
-| **cacheReadTokens** | **71.1 M** | **≈99.5%** |
+| **cacheReadTokens** | **71.1 M** | **≈99.5%（token 数占比）** |
 | inputTokens（未缓存） | 397 K | 0.6% |
 | outputTokens | 332 K | — |
 | 其中 reasoningTokens | 171 K | 占 output 52% |
@@ -73,7 +81,7 @@ zstdcat "$F" | grep -o '"cacheReadTokens":[0-9]*' | awk -F: 'NR%40==1 {printf "�
 
 ## 4. 根因
 
-**账单 99.5% 是 cacheRead** —— 即"每一步都把整个上下文重读一遍"。
+**token 有 99.5% 是 cacheRead**（⚠️ 更正：按**钱**算只占约 1/3，见 2026-09-19 更正段）—— 即"每一步都把整个上下文重读一遍"。
 所以成本 ≈ **上下文大小 × 请求数**，而不是工具调用次数。
 
 把 402 个请求按上下文均值切两半：
@@ -108,7 +116,8 @@ zstdcat "$F" | grep -o '"cacheReadTokens":[0-9]*' | awk -F: 'NR%40==1 {printf "�
 agent-default-model:
   provider: deepseek-official
   model: deepseek-v4-flash
-  reasoningEffort: medium      # high -> medium
+  reasoningEffort: high         # ⚠️ 2026-09-19 更正：medium 非法；high 是默认档，写它=no-op。
+                                #    要降本：执行型会话改 off（会抛错吗？不会——off 在允许列表内）
 
 spill-policy:
   maxInlineBytes: 8192         # 此前未配置 = true no-op
@@ -177,7 +186,7 @@ harness 持续正常运行 ⇒ 校验通过。
 |---|---|
 | 手动压缩当前会话（**最立竿见影**） | 敲 `/compact` |
 | 看当前花费 | Web GUI，或按 §2 的脚本统计 |
-| 需要深度分析时临时提高推理强度 | `settings.yaml` 里把 `reasoningEffort` 改回 `high` |
+| 需要深度分析时提高推理强度 | ⚠️ 更正：`high` 是默认档；`low`/`medium` 会被适配器拒绝。要**更强**用 `max`（并显式压 `max_tokens`，该档默认抬到 128 K），要**更省**用 `off` —— 且换档只在会话边界做（见 `交接体系.md` §6） |
 
 ## 8. 三个必须知道的限制
 
@@ -185,11 +194,11 @@ harness 持续正常运行 ⇒ 校验通过。
    `read → spill → read again` 死循环。所以读大文件仍会整段进上下文 ——
    **必须靠调用方自觉用 `offset`/`limit`/`grep` 控制**。
 2. **compaction 阈值 358 K 仍偏保守。** 想更激进可降到 `0.2`（≈205 K）。
-3. **`reasoningEffort` 是唯一可能影响质量的改动。** 其余两项是纯收益。
+3. **`reasoningEffort` 是唯一可能影响质量的改动**（且只接受 `off`/`high`/`max`）。其余两项是纯收益。
 
 ## 9. 给未来的自己：写子代理/调研的习惯
 
-- 子代理一律**就地写文件、只回 ≤30 行指针**，不要让完整报告回到父上下文
+- 子代理一律**就地写文件**（`.handoff/reports/`）、**只回 ≤10 行摘要 + 文件路径**，不要让完整报告回到父上下文（已用 preset `persona` 结构化）
 - 不要开宽泛调研（"请调研 X 并给出方案与来源"会让代理翻几十页文档、吐几千字）
 - 先在本地找答案：本仓库这次的成本根因就是**读插件源码**找到的，零网络开销
 - 大输出先落盘，再按需取片段

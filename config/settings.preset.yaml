@@ -1,0 +1,15 @@
+# 让禁递归的 preset 成为默认
+#
+# 用法：合并进 ~/.dsh/settings.yaml；并把 presets/standard-leash/ 复制到 ~/.dsh/.agent-presets/ 下：
+#     mkdir -p ~/.dsh/.agent-presets
+#     cp -r presets/standard-leash ~/.dsh/.agent-presets/
+#
+# 生效范围：**新会话**（含它派出的子代理）。当前已开着的会话不受影响。
+# 验收：新会话里派一次子代理后跑 `python3 scripts/verify_leash.py`，期望 PASS。
+# 回滚：default 改回 standard（或删掉本段）。
+# 升级注意：standard-leash 是随包发布的 standard preset 的副本，DSH 升级后需重新对齐：
+#     cp <checkout>/config/agent-presets/standard/agent.cordis.yml \
+#        ~/.dsh/.agent-presets/standard-leash/agent.cordis.yml
+#   然后补回 preset 里那两行 config（maxDepth / toolFilter / agentOptions / persona）。
+agent-presets:
+  default: standard-leash
