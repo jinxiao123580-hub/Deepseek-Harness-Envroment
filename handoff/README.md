@@ -92,7 +92,12 @@
 
 ## 6. 档位（reasoning effort）
 
-DeepSeek 这条线只有 `off` / `high` / `max`（`low`/`medium` 会被适配器直接拒绝；`medium` 是 `high` 的别名）。
+**可用档位是按模型算的，不是全局事实**（2026-09-19 实测更正：旧版这里写"只有 `off`/`high`/`max`，
+`low`/`medium` 会被适配器拒"——**是错的**）。
+适配器 `dsh-llm-deepseek` 的白名单实为 `off` / `low` / `high` / `max`（`lib/index.js:28`）；
+真正决定某档能不能用的是**每个模型自己的 `thinkingLevelMap`**（值为 `null` = 该档不可用）。
+例：`deepseek-official/deepseek-flash` 四条全可用；`zai/glm-5.3` 只有 `low`/`high`/`max`（**没有 `off`**）。
+查当前默认模型可用哪些档：`node tools/show-effort-levels.mjs --current`（非法档位会退出 1）。
 
 - **会话起始就定档**：执行型会话 `off`，决策/反思型会话 `high`。
 - **换档只在上下文 <30k 时做一次**：实测 30k 前缀首次启用新档位 = 一次全冷（约 ¥0.06）；在 250k 上下文里首次启用 = **¥0.5 且要多等 ~20 秒**。
