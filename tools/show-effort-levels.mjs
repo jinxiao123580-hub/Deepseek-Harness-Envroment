@@ -80,6 +80,27 @@ function readCurrentSelection() {
   return { dshHome, file, ...out };
 }
 
+/**
+ * 原生（不走 pi-ai 目录）路由的档位知识。
+ *
+ * `deepseek-official` 由 `dsh-llm-deepseek` 自己注册
+ * （`lib/index.js:1840` `const PROVIDER = "deepseek-official";`），
+ * 它的档位**不来自 pi-ai 目录**，而是写死在库里的 `REASONING_EFFORTS`
+ * （`lib/index.js:1417`）= `off` / `low` / `high` / `max`，
+ * `defaultEffort` 按配置回落到 `high`（`lib/index.js:1595`）。
+ * 例外：该 provider 的配置里若写了 `reasoning: "off"`（部署级关思考），
+ * 则退化成只有 `off`（`lib/index.js:1592` `efforts: OFF_ONLY_REASONING_EFFORTS`）。
+ *
+ * 注意这与目录里的 provider `deepseek`（`data/deepseek.json`）**不是一回事**：
+ * 那个是 pi-ai 路由，`deepseek-v4-flash` 只声明 low/high/max，没有 off。
+ */
+const NATIVE_ROUTES = {
+  'deepseek-official': {
+    source: 'dsh-llm-deepseek/lib/index.js:1417 REASONING_EFFORTS',
+    levels: ['off', 'low', 'high', 'max'],
+  },
+};
+
 /** 从一张模型条目里推出可用档位。 */
 function availableLevels(entry) {
   const map = entry.thinkingLevelMap;
@@ -131,14 +152,23 @@ function main() {
     const cur = readCurrentSelection();
     if (!cur) { console.error(`${LOG} 读不到 agent-default-model（检查 $DSH_HOME/settings.yaml）`); process.exit(1); }
     const hit = rows.find((r) => r.provider === cur.provider && r.id === cur.model);
-    const levels = hit ? availableLevels(hit.entry) : null;
+    const native = NATIVE_ROUTES[cur.provider];
+    let levels = null;
+    let detail = '';
+    if (hit) {
+      levels = availableLevels(hit.entry);
+      detail = `thinkingLevelMap = ${JSON.stringify(hit.entry.thinkingLevelMap ?? null)}`;
+    } else if (native) {
+      levels = native.levels;
+      detail = `原生路由（不来自 pi-ai 目录）: ${native.levels.join(' / ')}   [${native.source}]`;
+    }
     const want = cur.reasoningEffort;
     const verdict = levels === null ? 'unknown'
       : levels.length === 0 ? 'model-declares-no-effort'
         : (want === undefined ? 'default' : (levels.includes(want) ? 'LEGAL' : 'ILLEGAL'));
 
     if (asJson) {
-      console.log(JSON.stringify({ selection: cur, levels, verdict, entry: hit?.entry?.thinkingLevelMap }, null, 2));
+      console.log(JSON.stringify({ selection: cur, levels, verdict, source: hit ? 'pi-ai-catalog' : (native ? 'native-route' : null), detail }, null, 2));
       process.exit(verdict === 'ILLEGAL' ? 1 : 0);
     }
     console.log(`${LOG} 目录: ${dir}`);
@@ -147,11 +177,12 @@ function main() {
     console.log(`  model     : ${cur.model}`);
     console.log(`  effort    : ${want ?? '(未设置 → 用模型默认档)'}`);
     if (levels === null) {
-      console.log(`  ⚠️ 目录里找不到 ${cur.provider}/${cur.model}，无法判定`);
+      console.log(`  ⚠️ 目录里找不到 ${cur.provider}/${cur.model}，且该 provider 不是已知原生路由 → 无法判定`);
+      console.log(`     （原生路由目前只登记了: ${Object.keys(NATIVE_ROUTES).join(', ')}）`);
       process.exit(2);
     }
     console.log(`  可用档位  : ${levels.length ? levels.join(' / ') : '(该模型不声明任何档位)'}`);
-    console.log(`  thinkingLevelMap = ${JSON.stringify(hit.entry.thinkingLevelMap ?? null)}`);
+    console.log(`  依据      : ${detail}`);
     if (verdict === 'LEGAL') console.log(`  ✅ 合法：${want} 在该模型的能力表里`);
     else if (verdict === 'ILLEGAL') {
       console.log(`  ❌ 非法：${want} 不在可用档位里 —— 请求时会抛 UNSUPPORTED_REASONING_EFFORT`);

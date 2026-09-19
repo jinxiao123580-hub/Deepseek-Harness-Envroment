@@ -67,9 +67,26 @@ llm-pi-ai:
           reasoningEfforts:
             high: high
             max: max
+# 默认模型。
+#
+# provider 用 `deepseek-official` —— 它是 dsh-llm-deepseek 注册的**原生路由**
+# （lib/index.js:1840 `const PROVIDER = "deepseek-official";`），
+# 四个模型统一拿到 off / low / high / max（lib/index.js:1417 REASONING_EFFORTS）。
+# **包含 off** —— 规则 4 的"执行型会话用 off"靠它才成立。
+#
+# 注意别和目录里的 provider `deepseek`（pi-ai 路由）混：那个的
+# deepseek-v4-flash 只有 low/high/max，deepseek-v4-pro 只有 high/max，都没有 off。
+#
+# model 可选（都在 deepseek-official 下）：
+#   deepseek-flash                 DeepSeek-V41-Flash，text+image，日常默认
+#   deepseek-v4-flash              纯文本
+#   deepseek-v4-pro                复杂任务，更贵
+#   deepseek-v4-flash-vision-exp   与 deepseek-flash 实际路由到的后端同名，显式写法
+#
+# 核查当前生效值：node tools/show-effort-levels.mjs --current
 agent-default-model:
   provider: deepseek-official
-  model: deepseek-v4-flash-vision-exp
+  model: deepseek-flash
   reasoningEffort: high
 agent-presets:
   default: router-standard
