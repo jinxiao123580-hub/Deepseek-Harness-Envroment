@@ -24,8 +24,9 @@
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    text: >-
-      You are a coding agent powered by the {{model}} model. Your working directory is {{cwd}}.
+    suffix: Your working directory is {{cwd}}.
+    prefix: >-
+      You are a coding agent powered by the {{model}} model.
 
 - id: agent-instructions
   name: '@deepseek-ai/dsh-agent-instructions'
@@ -88,12 +89,12 @@
 
 # ── goals ───────────────────────────────────────────────────────────────────
 
-# Only the model-facing tool. The goal SERVICE, its session driver, and the
-# `/goal` command stay on the host plane: the Gateway serves the goal domain as
-# Remote endpoints whose receiver comes from a generated descriptor, so it
-# resolves `goals` on the host and an entry-local realm here would hide it. The
-# registry is keyed by session anyway, so one host instance serves every
-# session. What a preset chooses is whether its agent can call the goal tool.
+# The goal service and session driver stay on the host plane, where the Gateway
+# can resolve them. The human command and model-facing tool register into this
+# preset's scoped layers.
+- id: command-goal
+  name: '@deepseek-ai/dsh-command-goal'
+
 - id: tool-goal
   name: '@deepseek-ai/dsh-tool-goal'
 
@@ -165,12 +166,6 @@
 # `workflows` is different — nothing outside an agent reads it — so every row
 # that reaches it shares one entry-local realm here, and a consumer left
 # outside would resolve a host registry this preset does not populate.
-#
-# `tool-subagent-report` is host-plane for the same reason as the registry,
-# not because a preset may not want it: it registers a CONTINUABLE SETUP on
-# that singleton rather than a tool this agent calls, and the setup list is
-# not scope-aware — one copy per mounted preset means every child gets
-# `report` registered once per live session, which throws on the second.
 - id: delegation
   name: cordis:group
   group: true
@@ -183,22 +178,33 @@
     - id: tool-subagent-list-agents
       name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
 
-    # ── 本副本的唯一改动（standard-leash）──────────────────────────────
-    # 2026-09-19：禁递归。maxDepth: 1 → resolveChildDepth 里 childDepth=parent+1，
-    # 于是「顶层会话(depth 0)可以派子代理(depth 1)，子代理不能再派(depth 2 会抛
-    # SubagentDepthError)」。toolFilter.deny 是第二道锁（子代理连工具都看不见），
-    # 同时掐掉子代理用 workflow/ralph 变相扇出的路径。
-    # 背景：09-19 上午 2 个调查子代理自动扇出成 20 个，单日 ¥8.34（主对话只占 ¥0.59）。
     - id: tool-subagent
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
         provider: spawn
         toolName: subagent
+        modelSelectionSettings: true
         backgroundMode: continuable
-        # 2026-09-19（Q19-B）：子代理改走 deepseek-cheap 路由（思考关闭）。
-        # 子代理任务多为「抓取 + 汇总」，不需要思考链；这条是今天唯一能大幅压子代理成本的手段。
-        # 2026-09-19：子代理宪法（结构化，写在系统提示的第一段 order:0）。
-        # 目的：报告规则不靠上级每次在 prompt 里叮嘱，而是子代理自带。
+        # ── 子代理护栏（standard-leash 相对 standard 的**全部**改动；由 tools/lib/leash.mjs 注入）──
+        # ① 子代理改走 deepseek-cheap 路由（thinking: disabled）——
+        #    reasoningEffort 是唯一没有 per-agent 配置路径的旋钮（AgentOptions 只有 provider/model/maxTokens），
+        #    所以"让子代理不思考"只能靠换一条默认档位为 off 的路由。
+        #    注意：目标 preset 里若没有 deepseek-cheap 这个 provider，请先合并
+        #    config/settings.deepseek-cheap.yaml，否则子代理会因为找不到 provider 而失败。
+        agentOptions:
+          provider: deepseek-cheap
+          model: deepseek-flash
+        # ② 禁递归：resolveChildDepth 里 childDepth = parent + 1，depth 2 直接抛 SubagentDepthError
+        maxDepth: 1
+        # ③ 第二道锁：子代理连这些工具都看不见（同时掐掉用 workflow/ralph 变相扇出的路径）
+        toolFilter:
+          deny:
+            - subagent
+            - subagent_fork
+            - workflow
+            - ralph
+        # ④ 子代理宪法：注入为 systemPrompt.section({name:"deployment:persona", order:0})，
+        #    所以报告纪律不靠上级每次在 prompt 里叮嘱。
         persona: |-
           你是被派来执行具体任务的执行型子代理。硬规则：
           1. 只做被指派的事，不扩大范围；不要再派子代理（工具已禁用）。
@@ -206,27 +212,37 @@
           3. 详细结果写进 <cwd>/.handoff/reports/<YYYYMMDD>-<slug>.md，文件第一段必须是 <=10 行的结论摘要（重要在前）。
           4. 你回给上级的那段话只允许：<=10 行摘要 + 报告文件绝对路径 + 你没确定的事。禁止把长文或原始材料贴回上级。
           5. 不复述任务背景，不解释你的过程。
-        agentOptions:
-          provider: deepseek-cheap
-          model: deepseek-flash
-        maxDepth: 1
-        toolFilter:
-          deny:
-            - subagent
-            - subagent_fork
-            - workflow
-            - ralph
 
+    # Fork omits model selection so provider/model stay equal to the parent and
+    # the inherited history remains eligible for KV Cache reuse. This preset
+    # keeps fork continuable; parent and child inherit the same messaging tool,
+    # while the parent id and return guidance follow the inherited history.
     - id: tool-subagent-fork
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
         provider: fork
         toolName: subagent_fork
         backgroundMode: continuable
-        # fork 出来的孩子同样走便宜路由（fork 只在 provider+model 与父一致时才继承父的 header，
-        # 这里 provider 不同 → 重新按路由默认 off 解析，符合预期）
-        # 2026-09-19：子代理宪法（结构化，写在系统提示的第一段 order:0）。
-        # 目的：报告规则不靠上级每次在 prompt 里叮嘱，而是子代理自带。
+        # ── 子代理护栏（standard-leash 相对 standard 的**全部**改动；由 tools/lib/leash.mjs 注入）──
+        # ① 子代理改走 deepseek-cheap 路由（thinking: disabled）——
+        #    reasoningEffort 是唯一没有 per-agent 配置路径的旋钮（AgentOptions 只有 provider/model/maxTokens），
+        #    所以"让子代理不思考"只能靠换一条默认档位为 off 的路由。
+        #    注意：目标 preset 里若没有 deepseek-cheap 这个 provider，请先合并
+        #    config/settings.deepseek-cheap.yaml，否则子代理会因为找不到 provider 而失败。
+        agentOptions:
+          provider: deepseek-cheap
+          model: deepseek-flash
+        # ② 禁递归：resolveChildDepth 里 childDepth = parent + 1，depth 2 直接抛 SubagentDepthError
+        maxDepth: 1
+        # ③ 第二道锁：子代理连这些工具都看不见（同时掐掉用 workflow/ralph 变相扇出的路径）
+        toolFilter:
+          deny:
+            - subagent
+            - subagent_fork
+            - workflow
+            - ralph
+        # ④ 子代理宪法：注入为 systemPrompt.section({name:"deployment:persona", order:0})，
+        #    所以报告纪律不靠上级每次在 prompt 里叮嘱。
         persona: |-
           你是被派来执行具体任务的执行型子代理。硬规则：
           1. 只做被指派的事，不扩大范围；不要再派子代理（工具已禁用）。
@@ -234,27 +250,18 @@
           3. 详细结果写进 <cwd>/.handoff/reports/<YYYYMMDD>-<slug>.md，文件第一段必须是 <=10 行的结论摘要（重要在前）。
           4. 你回给上级的那段话只允许：<=10 行摘要 + 报告文件绝对路径 + 你没确定的事。禁止把长文或原始材料贴回上级。
           5. 不复述任务背景，不解释你的过程。
-        agentOptions:
-          provider: deepseek-cheap
-          model: deepseek-flash
-        maxDepth: 1
-        toolFilter:
-          deny:
-            - subagent
-            - subagent_fork
-            - workflow
-            - ralph
 
-    # Product providers are host-plane singletons. Copy this preset, then
-    # remove `disabled` from either ordinary tool row to expose that product
-    # only to agents composed from the copy.
+    # Production dsh does not install these optional providers. Install the
+    # matching Bundle in this Profile and restart the Host, then copy this
+    # preset and remove `disabled` from the matching tool row. Host availability
+    # alone grants no tool.
     - id: tool-subagent-codex
       name: '@deepseek-ai/dsh-tool-subagent'
       disabled: true
       config:
         provider: codex
         toolName: subagent_codex
-        enableRunInBackground: false
+        backgroundMode: one-shot
         maxDepth: provider-managed
 
     - id: tool-subagent-claude-code
@@ -263,7 +270,7 @@
       config:
         provider: claude-code
         toolName: subagent_claude_code
-        enableRunInBackground: false
+        backgroundMode: one-shot
         maxDepth: provider-managed
 
     - id: workflow-worker-thread
@@ -295,5 +302,8 @@
 - id: tool-web
   name: '@deepseek-ai/dsh-tool-web'
   config:
-    fetch: false
+    fetch: true
     searchTimeoutMs: 60000
+
+- id: present
+  name: '@deepseek-ai/dsh-tool-present'

@@ -1,0 +1,12 @@
+# User-global RTK filters — apply to all your projects.
+# 项目级 `.rtk/filters.toml` 优先于本文件。
+# 文档: https://github.com/rtk-ai/rtk#custom-filters
+schema_version = 1
+
+# 示例：压缩某个常用工具的输出
+# [filters.my-global-tool]
+# description = "Compact my-global-tool output"
+# match_command = "^my-global-tool\\b"
+# strip_ansi = true
+# strip_lines_matching = ["^\\s*$"]
+# max_lines = 40

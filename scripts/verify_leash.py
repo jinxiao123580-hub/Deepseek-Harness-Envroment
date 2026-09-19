@@ -2,7 +2,10 @@
 # -*- coding: utf-8 -*-
 """验收 standard-leash + deepseek-cheap 是否真的生效（只需在**新会话**里跑过一次委派之后执行）。
 
-    python3 scripts/verify_leash.py [--since-min 120]
+    python3 scripts/verify_leash.py [--since-min 120]     # Ubuntu / macOS
+    python scripts\\verify_leash.py [--since-min 120]     # Windows
+
+会话日志解压走 _session_io（python-zstandard → zstdcat → zstd -dc），不再硬依赖 zstd CLI。
 
 检查四项（这是"未验证项"的唯一验收标准）：
   1. 新会话是否挂上了 standard-leash（session 头里的 agentPreset）
@@ -12,25 +15,22 @@
 
 任一项不过 → 打印对应修法。全部通过 → 打印 PASS。
 """
-import argparse, collections, datetime, glob, json, os, subprocess
+import argparse, collections, datetime, json, os, sys
 
-SESSIONS = os.path.expanduser("~/.dsh/sessions/*/*/session.jsonl.zstd")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _session_io as S  # noqa: E402
+import _console  # noqa: E402
+
 PERSONA_MARK = "执行型子代理"
 SUB_ROUTE = "deepseek-cheap"
 
 
-def load(f):
-    p = subprocess.run(["zstdcat", f], capture_output=True)
-    if p.returncode:
+def load(f, backend=None):
+    """读一个会话；读不动（缺后端/文件损坏）返回 None（调用方跳过）。"""
+    try:
+        ev = S.load_events(f, backend)
+    except Exception:
         return None
-    ev = []
-    for line in p.stdout.decode("utf-8", "replace").splitlines():
-        line = line.strip()
-        if line:
-            try:
-                ev.append(json.loads(line))
-            except Exception:
-                pass
     return ev or None
 
 
@@ -45,12 +45,17 @@ def cutoff_ms(since_min):
 
 
 def main():
+    _console.setup()
     ap = argparse.ArgumentParser()
     ap.add_argument("--since-min", type=int, default=None,
                     help="只看最近 N 分钟内**新建**的会话；省略则用 standard-leash 的安装时间做分界")
     a = ap.parse_args()
     cut = cutoff_ms(a.since_min)
     print("分界时间：%s（只统计此后新建的会话）\n" % datetime.datetime.fromtimestamp(cut / 1000).strftime("%Y-%m-%d %H:%M:%S"))
+
+    backend = S.preflight()
+    if backend is None:
+        return
 
     presets = collections.Counter()
     depths = collections.Counter()
@@ -59,8 +64,8 @@ def main():
     main_sessions = 0
     fresh = 0
 
-    for f in glob.glob(SESSIONS):
-        ev = load(f)
+    for f in S.iter_session_files():
+        ev = load(f, backend)
         if not ev:
             continue
         times = [o["time"] for o in ev if o.get("time")]

@@ -3,24 +3,37 @@
 """每周成本/质量复盘 —— 从 ~/.dsh/sessions 的会话日志里算六项指标。
 
 用法:
-    python3 scripts/weekly_review.py            # 最近 7 天
+    python3 scripts/weekly_review.py            # 最近 7 天（Ubuntu / macOS）
     python3 scripts/weekly_review.py --days 14
+    python scripts\\weekly_review.py --days 14  # Windows
 
 输出: ~/.handoff/review/<YYYY-MM-DD>.md （同时往 stdout 打 ≤8 行摘要）
+
+会话日志解压走 _session_io（python-zstandard → zstdcat → zstd -dc），不再硬依赖 zstd CLI。
 
 定价: DeepSeek 官方 deepseek-flash（=V4.1-Flash）空闲 ¥1/¥0.02/¥4、高峰 ×2；
       高峰 = 周一至五 01:00–04:00 与 06:00–10:00 UTC（= 北京 09–12、14–18 点）。
       走包月套餐（ark-*）的请求单独列出，边际成本≈0。
       非 DeepSeek 路由（zai-* 等）按同价估算，仅供横向比较——不是真实账单。
 """
-import argparse, collections, datetime, glob, json, os, re, subprocess
+import argparse, collections, datetime, glob, json, os, re, sys
 
-SESSIONS = os.path.expanduser("~/.dsh/sessions/*/*/session.jsonl.zstd")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _session_io as S  # noqa: E402
+import _console  # noqa: E402
+
 HANDOFF = os.path.expanduser("~/.handoff")
 OUTDIR = os.path.join(HANDOFF, "review")
 BASELINE = 68.0          # 2026-09-09 ~ 09-19 实测总账（¥）
 BASELINE_DAYS = 11
 COLD_MID_MIN = 20000     # 会话中途"冷读"的判定下限（未命中 tokens）
+
+# 【2026-09-19 修】这里原来写死 `d.get("name") == "bash"`，于是第 5 节"步骤重复"
+# **恒为 0** —— 因为本机根本没有 bash 工具。实测 123 个会话的 tool/call 名称分布：
+#   pwsh 7151 / edit 2042 / read 2038 / write 1143 / grep 722 / job_output 374 / ...
+# 即 Windows 上的 shell 工具叫 `pwsh`。这个指标是文档里点名的"头号失败模式"，
+# 长期恒 0 等于完全没在观测。现在按"shell 类工具"整组统计。
+SHELL_TOOLS = frozenset({"bash", "sh", "shell", "zsh", "pwsh", "powershell", "cmd", "cmd.exe", "terminal"})
 
 
 def is_peak(ts_ms):
@@ -37,21 +50,14 @@ def cost_of(inp, cr, out, ts_ms):
     return (cr * cin + inp * cmiss + out * cout) / 1e6
 
 
-def load_sessions():
+def load_sessions(backend=None):
     out = []
-    for f in glob.glob(SESSIONS):
-        proc = subprocess.run(["zstdcat", f], capture_output=True)
-        if proc.returncode:
+    for f in S.iter_session_files():
+        try:
+            ev = S.load_events(f, backend)
+        except Exception as exc:
+            print("跳过 %s: %s" % (f, exc), file=sys.stderr)
             continue
-        ev = []
-        for line in proc.stdout.decode("utf-8", "replace").splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                ev.append(json.loads(line))
-            except Exception:
-                pass
         if not ev:
             continue
         ev.sort(key=lambda o: o.get("time") or 0)
@@ -76,7 +82,7 @@ def scan(sess, since_ms):
                 reqs.append(dict(ts=o["time"], prov=prov,
                                  inp=u.get("inputTokens", 0), cr=u.get("cacheReadTokens", 0),
                                  out=u.get("outputTokens", 0), rt=u.get("reasoningTokens", 0)))
-        elif t == "tool/call" and d.get("name") == "bash" and (o.get("time") or 0) >= since_ms:
+        elif t == "tool/call" and d.get("name") in SHELL_TOOLS and (o.get("time") or 0) >= since_ms:
             try:
                 cmd = json.loads(d.get("arguments") or "{}").get("command", "")
             except Exception:
@@ -102,6 +108,7 @@ def handoff_dirs():
 
 
 def main():
+    _console.setup()
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=7)
     ap.add_argument("--quiet", action="store_true")
@@ -120,7 +127,11 @@ def main():
     sub_cost = sub_tasks = 0.0
     main_sessions = max_ctx = repeats = repeat_sessions = 0
 
-    for s in load_sessions():
+    backend = S.preflight()
+    if backend is None:
+        return
+
+    for s in load_sessions(backend):
         reqs, cmds = scan(s, since)
         if not reqs:
             continue
@@ -182,7 +193,7 @@ def main():
         lo, hi = when.timestamp() * 1000, (when + datetime.timedelta(hours=24)).timestamp() * 1000
         c = sum(v for ts, v in main_cost_by_time if lo <= ts <= hi)
         lines.append("  - `%s` 之后 24h 主会话花费 ¥%.2f" % (name, c))
-    lines.append("\n## 5. 步骤重复（同一会话内同一条 bash 命令 ≥3 次）\n")
+    lines.append("\n## 5. 步骤重复（同一会话内同一条 shell 命令 ≥3 次）\n")
     lines.append("- %d 处，涉及 %d 个会话（MAST 测得的头号失败模式，占 15.7%%）" % (repeats, repeat_sessions))
     lines.append("\n## 6. 建议\n")
     tips = []
@@ -193,7 +204,9 @@ def main():
     if by_class["输出"] > total["cost"] * 0.45:
         tips.append("输出占成本 >45%：推理 token 是主因，执行型会话考虑改用 `off` 档。")
     if sub_cost > total["cost"] * 0.35:
-        tips.append("子代理占成本 >35%%：检查是否又有扇出、或委派任务粒度太粗。")
+        # 【2026-09-19 修】旧版写的是 ">35%%"：这是普通字符串（不是格式串），
+        # %% 不会被折叠成 %，于是文案里真的多出一个百分号。同段其它 tips 都用单个 %。
+        tips.append("子代理占成本 >35%：检查是否又有扇出、或委派任务粒度太粗。")
     if repeats:
         tips.append("存在步骤重复：多半是重试循环、或没落盘指针导致重复摸索。")
     lines.extend(["- " + t for t in tips] or ["- 无明显异常。"])

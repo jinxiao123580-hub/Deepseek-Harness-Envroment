@@ -11,6 +11,8 @@
 """
 import json, os, re, time, urllib.request
 
+import _console  # noqa: E402
+
 URL = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-flash"
 PUZZLE = [{"role": "user", "content":
@@ -53,6 +55,7 @@ def call(key, effort, max_tokens=4000):
 
 
 def main():
+    _console.setup()
     key = api_key()
     print("%-6s %6s %11s %10s %7s  %s" % ("档位", "秒", "completion", "reasoning", "文本", "答案摘录"))
     for eff in ("off", "low", "high", "max"):

@@ -1,0 +1,24 @@
+# Build outputs
+launcher/dist/
+*.pdb
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Secrets — never commit real API keys (keep the .example template only)
+.credentials*.yaml
+!.credentials.example.yaml
+config/.credentials.yaml
+config/*.local.yaml
+
+# Local scratch (tests, uv cache, downloaded runtimes)
+_test/
+_work/
+.uvcache/
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/

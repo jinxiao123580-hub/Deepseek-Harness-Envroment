@@ -3,7 +3,11 @@
 """实测：**换个档位会不会打断前缀缓存**。
 
     export DEEPSEEK_API_KEY=sk-...      # 或从 ~/.dsh/.credentials.yaml 读取
-    python3 scripts/cache_lineage.py --filler-repeats 430
+    python3 scripts/cache_lineage.py --filler-repeats 430     # Ubuntu / macOS
+    python scripts\\cache_lineage.py --filler-repeats 430     # Windows
+
+Windows 上没有 `export`；用 `$env:DEEPSEEK_API_KEY = "sk-..."`，或依赖
+~/.dsh/.credentials.yaml（脚本会自动读，路径用 os.path.expanduser 展开，两边通用）。
 
 做法：构造一个约 30k tokens 的固定前缀，然后按 [high, high, off, high, low, off, high, low, max, high, max]
 的顺序反复请求同一个 prompt，只改 `thinking`/`reasoning_effort`，观察 `prompt_cache_hit_tokens`。
@@ -15,6 +19,8 @@
 成本：约 30 万输入 tokens（其中大部分命中），几分钱。
 """
 import argparse, json, os, re, time, urllib.request
+
+import _console  # noqa: E402
 
 URL = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-flash"
@@ -39,6 +45,7 @@ def api_key():
 
 
 def main():
+    _console.setup()
     ap = argparse.ArgumentParser()
     ap.add_argument("--filler-repeats", type=int, default=430, help="430 ≈ 30k tokens 的前缀")
     a = ap.parse_args()

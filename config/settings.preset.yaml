@@ -1,15 +1,26 @@
 # 让禁递归的 preset 成为默认
 #
-# 用法：合并进 ~/.dsh/settings.yaml；并把 presets/standard-leash/ 复制到 ~/.dsh/.agent-presets/ 下：
-#     mkdir -p ~/.dsh/.agent-presets
-#     cp -r presets/standard-leash ~/.dsh/.agent-presets/
+# 用法：**合并**进 ~/.dsh/settings.yaml（不要整份覆盖！），并把 presets/standard-leash/
+#       复制到 ~/.dsh/.agent-presets/ 下。
+#       install.ps1 / install.sh 会自动做这两件事；手工做的命令：
+#         Ubuntu/macOS : mkdir -p ~/.dsh/.agent-presets && cp -r presets/standard-leash ~/.dsh/.agent-presets/
+#         Windows      : New-Item -ItemType Directory -Force "$env:USERPROFILE\.dsh\.agent-presets" | Out-Null
+#                        Copy-Item .\presets\standard-leash "$env:USERPROFILE\.dsh\.agent-presets\" -Recurse -Force
+#
+#       合并用仓库自带的合并器（只增不删，会保留本机已有的 agent-presets.default）：
+#         node tools/merge-settings.mjs --template config/settings.preset.yaml --target ~/.dsh/settings.yaml
 #
 # 生效范围：**新会话**（含它派出的子代理）。当前已开着的会话不受影响。
-# 验收：新会话里派一次子代理后跑 `python3 scripts/verify_leash.py`，期望 PASS。
+# 验收：新会话里派一次子代理后跑 `python3 scripts/verify_leash.py`（Windows: `python scripts\verify_leash.py`），期望 PASS。
 # 回滚：default 改回 standard（或删掉本段）。
-# 升级注意：standard-leash 是随包发布的 standard preset 的副本，DSH 升级后需重新对齐：
-#     cp <checkout>/config/agent-presets/standard/agent.cordis.yml \
-#        ~/.dsh/.agent-presets/standard-leash/agent.cordis.yml
-#   然后补回 preset 里那两行 config（maxDepth / toolFilter / agentOptions / persona）。
+#
+# ⚠️ 升级注意（2026-09-19 改）：**不要**再手工 cp + 手贴 config 了。
+#    旧办法是「cp <checkout>/.../standard/agent.cordis.yml 覆盖副本，然后手动补回那两行 config」，
+#    而手工步骤正是漂移的来源 —— 实测仓库里那份副本已经过期，额外缺了 standard 本来
+#    就有的 command-goal / present / modelSelectionSettings / fetch: true / prefix+suffix。
+#    现在改用脚本重新生成：
+#        node tools/regen-standard-leash.mjs           # 重新生成
+#        node tools/regen-standard-leash.mjs --check   # 漂移检查（退出码 1，可放 CI）
+#    生成结果会在 presets/standard-leash/SOURCE.txt 里留下 dsh 版本与两边 sha256。
 agent-presets:
   default: standard-leash

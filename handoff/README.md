@@ -1,6 +1,11 @@
 # .handoff —— 交接目录约定
 
-> 触发方式：用户说「交接」。执行规程在 `~/AGENTS.md`（很短），细节全在这里。
+> 触发方式：用户说「交接」。执行规程在 **`$DSH_HOME/AGENTS.md`**（很短），细节全在这里。
+>
+> **路径更正（2026-09-19）**：旧版这里写的是 `~/AGENTS.md`。DSH 的用户全局指令文件其实是
+> `$DSH_HOME/AGENTS.md`，默认即 `~/.dsh/AGENTS.md`（Windows：`%USERPROFILE%\.dsh\AGENTS.md`）。
+> 依据 `@deepseek-ai/dsh-agent-instructions/lib/index.js:141/148/756`。
+> `~/AGENTS.md` 那个路径 DSH 从不读。详见 `AGENTS.rules.md`。
 
 ## 0. 三个词，别混
 

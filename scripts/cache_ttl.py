@@ -3,12 +3,25 @@
 """实测：**前缀缓存能活多久**（决定"隔夜续聊"要不要付一次全冷）。
 
     export DEEPSEEK_API_KEY=sk-...      # 或从 ~/.dsh/.credentials.yaml 读取
+    python3 scripts/cache_ttl.py --waits 15,45,120     # Ubuntu / macOS
+    python scripts\\cache_ttl.py --waits 15,45,120     # Windows
+
+等待时间较长（默认 +15/+45/+120 分钟），推荐后台跑。各平台写法：
+
+    # Ubuntu / macOS
     nohup python3 scripts/cache_ttl.py > /tmp/ttl.log 2>&1 &
+    tail -f /tmp/ttl.log
+
+    # Windows PowerShell（没有 nohup）
+    python scripts\\cache_ttl.py        # 开一个窗口挂着即可；或
+    Start-Job { python scripts\\cache_ttl.py } | Receive-Job -Wait
 
 先热一次 30k 前缀，然后在 +15 / +45 / +120 分钟各打一次同一个 prompt，
 观察 `prompt_cache_hit_tokens` 是否衰减。全程几乎只花命中价。
 """
 import argparse, datetime, json, os, re, time, urllib.request
+
+import _console  # noqa: E402
 
 URL = "https://api.deepseek.com/chat/completions"
 MODEL = "deepseek-flash"
@@ -30,6 +43,7 @@ def api_key():
 
 
 def main():
+    _console.setup()
     ap = argparse.ArgumentParser()
     ap.add_argument("--waits", default="15,45,120", help="分钟，逗号分隔")
     a = ap.parse_args()

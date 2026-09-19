@@ -2,7 +2,12 @@
 # -*- coding: utf-8 -*-
 """DSH 花费解剖：把 ~/.dsh/sessions 的 usage 事件折算成人民币，并按类别/会话/日期拆解。
 
-    python3 scripts/cost_anatomy.py [--days 30] [--top 10]
+    python3 scripts/cost_anatomy.py [--days 30] [--top 10]     # Ubuntu / macOS
+    python scripts\\cost_anatomy.py [--days 30] [--top 10]     # Windows
+
+会话日志解压统一走 _session_io（python-zstandard → zstdcat → zstd -dc），
+不再硬依赖 zstd 命令行工具 —— Windows 上默认没有它，旧版 subprocess.run(["zstdcat",...])
+会直接抛 FileNotFoundError（不是 returncode != 0，所以旧代码兜不住）把脚本崩掉。
 
 关键点：单价差 50–200 倍（缓存命中 ¥0.02–0.04/M，未命中 ¥1–2/M，输出 ¥4–8/M），
 所以 **token 占比 ≠ 账单占比** —— 本脚本按钱算。
@@ -12,9 +17,11 @@
   高峰：×2（高峰 = 周一至五 01:00–04:00 与 06:00–10:00 UTC，即北京 09–12、14–18 点）
 走包月套餐（provider 以 ark- 开头）的请求边际成本记 0，单独列出。
 """
-import argparse, collections, datetime, glob, json, os, subprocess
+import argparse, collections, datetime, json, os, sys
 
-SESSIONS = os.path.expanduser("~/.dsh/sessions/*/*/session.jsonl.zstd")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _session_io as S  # noqa: E402
+import _console  # noqa: E402
 
 
 def is_peak(ts_ms):
@@ -27,6 +34,7 @@ def rates(ts_ms):
 
 
 def main():
+    _console.setup()
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=int, default=3650)
     ap.add_argument("--top", type=int, default=10)
@@ -43,17 +51,16 @@ def main():
     reason_chars = text_chars = 0
     total = 0.0
 
-    for f in sorted(glob.glob(SESSIONS)):
-        p = subprocess.run(["zstdcat", f], capture_output=True)
-        if p.returncode:
+    backend = S.preflight()
+    if backend is None:
+        return
+
+    for f in S.iter_session_files():
+        try:
+            ev = S.load_events(f, backend)
+        except Exception as exc:
+            print("跳过 %s: %s" % (f, exc), file=sys.stderr)
             continue
-        ev = []
-        for line in p.stdout.decode("utf-8", "replace").splitlines():
-            if line.strip():
-                try:
-                    ev.append(json.loads(line))
-                except Exception:
-                    pass
         if not ev:
             continue
         depth[ev[0].get("delegationDepth") or 0] += 1
