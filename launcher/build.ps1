@@ -1,4 +1,4 @@
-# build.ps1 - compile HarnessLauncher (framework csc, no .NET SDK needed)
+﻿# build.ps1 - compile HarnessLauncher (framework csc, no .NET SDK needed)
 # usage:  powershell -ExecutionPolicy Bypass -File .\launcher\build.ps1
 $ErrorActionPreference = "Stop"
 

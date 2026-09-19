@@ -1,0 +1,44 @@
+# 统一换行策略 —— 这是 Windows / Ubuntu 之间**会真的把脚本跑坏**的差异之一。
+#
+# 背景：Windows 上 git 默认 core.autocrlf=true，会把 .sh 也转成 CRLF。
+# 而 CRLF 的 shell 脚本在 Ubuntu 上第一行 shebang 会变成
+#   /usr/bin/env: 'bash\r': No such file or directory
+# 或 bash: ./install.sh: /usr/bin/env bash^M: bad interpreter
+# 直接跑不起来，且报错信息完全指不到"换行符"这个真因。
+#
+# 策略：仓库里一律存 LF；只有 Windows 专属脚本（.ps1/.cmd/.bat）在检出时用 CRLF。
+
+* text=auto eol=lf
+
+# Windows 专属：惯例用 CRLF（PowerShell 5.1 两种都能读，CRLF 更稳）
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.psd1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# 这些**必须**保持 LF，否则在 Linux 上会坏
+*.sh text eol=lf
+*.py text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.cs text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# 二进制：不要做任何换行/编码转换
+*.exe binary
+*.dll binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.lnk binary
+*.db binary
+*.zstd binary

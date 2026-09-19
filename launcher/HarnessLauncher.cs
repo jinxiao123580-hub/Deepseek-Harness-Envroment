@@ -31,6 +31,25 @@ class HarnessLauncher
         return 3080;
     }
 
+    /// <summary>
+    /// 端口是否真的在监听。
+    ///
+    /// 【2026-09-19 修】旧实现是 `BeginConnect(...)` + `WaitOne(300)` 直接 return，
+    /// **从不调用 EndConnect**。于是返回值实际是"这次异步连接操作在 300ms 内结束了吗"，
+    /// 而不是"有人在这个端口监听吗" —— 连接**被拒绝**同样会让操作结束。
+    ///
+    /// 本机实测（.NET Framework 4.0.30319，两个探针端口对照）：
+    ///   · 监听中的端口 → WaitOne(300) 立刻 True（正确）
+    ///   · 已关闭的端口 → WaitOne(300) 为 False，但**再等 3 秒就变 True**，之后 EndConnect 抛
+    ///     SocketException。也就是说失败路径的异步完成**比 300ms 慢**。
+    /// 结论：在本机上旧实现碰巧给出正确答案（纯粹因为 300ms 短于失败完成延迟），
+    /// 属于**潜伏缺陷**而非已发生故障；一旦某个环境下 RST 回得快于 300ms，
+    /// `IsListening` 就会对死端口返回 true，后果是 Main 里永远不启动 dsh、
+    /// PickProxy 里给子进程设一个指向死端口的 HTTP(S)_PROXY。
+    ///
+    /// 修法是改用文档规定的模式：等到句柄置位后再 EndConnect（被拒时它会抛）。
+    /// 这样语义与超时无关，不再依赖"失败够不够慢"。
+    /// </summary>
     static bool IsListening(int port)
     {
         try
@@ -38,7 +57,9 @@ class HarnessLauncher
             using (TcpClient client = new TcpClient())
             {
                 IAsyncResult result = client.BeginConnect("127.0.0.1", port, null, null);
-                return result.AsyncWaitHandle.WaitOne(300);
+                if (!result.AsyncWaitHandle.WaitOne(300)) return false; // 超时 = 没在监听
+                client.EndConnect(result);                              // 被拒会抛 → 下面 catch
+                return true;
             }
         }
         catch
@@ -47,6 +68,14 @@ class HarnessLauncher
         }
     }
 
+    /// <summary>
+    /// 解析 dsh 的工作目录。
+    ///
+    /// 【2026-09-19 修】旧顺序是 env → **exe 所在目录** → D:\Deepseek Harness。
+    /// 而 launcher/README.md 教用户把 exe 复制到桌面 → exe 目录就是桌面 → 桌面被当成
+    /// dsh 工作目录（会话 slug、相对路径全落在桌面上）。
+    /// 新顺序：显式覆盖 → 旁置的 dsh-workdir.txt → D:\Deepseek Harness → 非桌面的 exe 目录 → 用户主目录。
+    /// </summary>
     static string PickWorkingDirectory()
     {
         string env = Environment.GetEnvironmentVariable("DSH_WORKDIR");
@@ -54,12 +83,63 @@ class HarnessLauncher
 
         string here = Path.GetDirectoryName(
             System.Reflection.Assembly.GetExecutingAssembly().Location);
-        if (!string.IsNullOrEmpty(here) && Directory.Exists(here)) return here;
+
+        // 允许在 exe 旁边放一个 dsh-workdir.txt 指定工作目录（一行路径）
+        if (!string.IsNullOrEmpty(here))
+        {
+            try
+            {
+                string sidecar = Path.Combine(here, "dsh-workdir.txt");
+                if (File.Exists(sidecar))
+                {
+                    string want = File.ReadAllText(sidecar).Trim();
+                    if (!string.IsNullOrEmpty(want) && Directory.Exists(want)) return want;
+                }
+            }
+            catch { }
+        }
 
         string preferred = @"D:\Deepseek Harness";
         if (Directory.Exists(preferred)) return preferred;
 
-        return string.IsNullOrEmpty(here) ? "." : here;
+        // 只有当 exe 不在桌面时才用 exe 目录
+        if (!string.IsNullOrEmpty(here) && Directory.Exists(here))
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            bool isDesktop = !string.IsNullOrEmpty(desktop) &&
+                             string.Equals(here.TrimEnd('\\'), desktop.TrimEnd('\\'),
+                                           StringComparison.OrdinalIgnoreCase);
+            if (!isDesktop) return here;
+            Console.WriteLine("[launcher] exe 位于桌面，不作为工作目录；改用用户主目录");
+        }
+
+        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    /// <summary>
+    /// 取 node 主版本号（失败返回 0）。
+    /// 用途：`--use-env-proxy` 是 Node 24+ 才认的参数，老版本会直接
+    /// `node: bad option: --use-env-proxy` 并让子进程立刻退出。
+    /// </summary>
+    static int NodeMajorVersion(string node)
+    {
+        try
+        {
+            ProcessStartInfo psi = new ProcessStartInfo(node, "--version");
+            psi.UseShellExecute = false;
+            psi.RedirectStandardOutput = true;
+            psi.CreateNoWindow = true;
+            Process p = Process.Start(psi);
+            if (p == null) return 0;
+            string v = p.StandardOutput.ReadToEnd().Trim();
+            p.WaitForExit(3000);
+            if (v.StartsWith("v")) v = v.Substring(1);
+            int dot = v.IndexOf('.');
+            int major;
+            if (dot > 0 && int.TryParse(v.Substring(0, dot), out major)) return major;
+        }
+        catch { }
+        return 0;
     }
 
     static string FindNode()
@@ -137,8 +217,22 @@ class HarnessLauncher
                     psi.EnvironmentVariables["HTTPS_PROXY"] = proxy;
                     psi.EnvironmentVariables["HTTP_PROXY"] = proxy;
                 }
-                // Node 24：让内置 fetch 通过环境变量代理
-                psi.EnvironmentVariables["NODE_OPTIONS"] = "--use-env-proxy";
+                // Node 24：让内置 fetch 通过环境变量代理。
+                // 【2026-09-19 修】旧实现无条件设 NODE_OPTIONS=--use-env-proxy，
+                // 在 Node < 24 上子进程会直接 `bad option` 退出（dsh 永远起不来）。
+                // 这里按主版本号门控；未识别到版本时宁可不设。
+                if (!string.IsNullOrEmpty(proxy))
+                {
+                    int major = NodeMajorVersion(node);
+                    if (major >= 24)
+                    {
+                        psi.EnvironmentVariables["NODE_OPTIONS"] = "--use-env-proxy";
+                    }
+                    else if (major > 0)
+                    {
+                        Console.WriteLine("[launcher] node v" + major + " < 24，跳过 NODE_OPTIONS=--use-env-proxy");
+                    }
+                }
                 Process.Start(psi);
                 return;
             }
@@ -154,7 +248,7 @@ class HarnessLauncher
 
         try
         {
-            ProcessStartInfo psi = new ProcessStartInfo("dsh", "web");
+            ProcessStartInfo psi = new ProcessStartInfo("dsh", "web --no-open");
             psi.WorkingDirectory = workDir;
             psi.UseShellExecute = true;
             psi.WindowStyle = ProcessWindowStyle.Minimized;
@@ -162,6 +256,7 @@ class HarnessLauncher
         }
         catch
         {
+            Console.WriteLine("[launcher] 启动 `dsh web` 失败 —— 确认 dsh 已在 PATH（重开终端后重试）");
         }
     }
 
@@ -177,11 +272,24 @@ class HarnessLauncher
         {
             StartServer(workDir);
         }
+        else
+        {
+            Console.WriteLine("[launcher] 端口已在监听，直接打开浏览器");
+        }
 
         // 等待服务就绪，最多约 90 秒
-        for (int i = 0; i < 180 && !IsListening(Port); i++)
+        bool ready = IsListening(Port);
+        for (int i = 0; i < 180 && !ready; i++)
         {
             Thread.Sleep(500);
+            ready = IsListening(Port);
+        }
+
+        if (!ready)
+        {
+            Console.WriteLine("[launcher] 等待 90 秒后 " + Url + " 仍未就绪，" +
+                              "不打开浏览器（避免看到白屏）。请检查 dsh 是否能手动启动。");
+            return;
         }
 
         // 打开浏览器
@@ -191,6 +299,7 @@ class HarnessLauncher
         }
         catch
         {
+            Console.WriteLine("[launcher] 打开浏览器失败，请手动访问 " + Url);
         }
     }
 }
