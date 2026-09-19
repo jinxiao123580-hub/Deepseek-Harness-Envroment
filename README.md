@@ -10,15 +10,45 @@
 > 合并过程中发现的问题、改进与 Windows/Ubuntu 差异，全部记在
 > **[`docs/改进与问题记录.md`](docs/改进与问题记录.md)** —— 部署前请先读它。
 
+## ⚠️ 平台归属：**这一份是 Windows 的**，Linux 那半留给别人补齐
+
+**本仓库是 Windows 机器的环境副本，所有"实测"结论都来自 Windows 真机。**
+下面这张表是准确的边界 —— 请**不要**把未经执行的脚本当成可用：
+
+| 组件 | Windows | Ubuntu / Debian |
+|---|---|---|
+| `install.ps1` | ✅ **在真机完整执行过**并逐项复验（见 [`docs/改进与问题记录.md`](docs/改进与问题记录.md) 第八节） | — |
+| `install.sh` | — | ⚠️ **从未在真实 Linux 上执行过**，只做过 `bash -n` 语法检查 |
+| `launcher/HarnessLauncher.cs`（+ `Launcher.exe`） | ✅ 能编译，逻辑缺陷已修 | —（C#/PE，不适用） |
+| `launcher/dsh-web.sh` | — | ⚠️ **从未在真实 Linux 上执行过**，只做过 `bash -n` |
+| `tools/*.mjs`、`scripts/*.py` | ✅ 本机跑通 | ⚙️ 设计上跨平台（路径按 `$DSH_HOME`/XDG 推导），但**未在 Linux 上跑过** |
+| 换行 / BOM 约定 | 代码页 936 的坑已处理 | ✅ 已由 `.gitattributes` + `tools/check-encoding.mjs` 锁死 LF + 禁 BOM |
+
+### Linux 侧需要接手做的事（按优先级）
+
+1. **在真实 Ubuntu / Debian 上跑一遍 `bash install.sh`**，把踩到的坑补回本文档 ——
+   这是目前最高优先的未完成项，`doctor` 也**不会**替你检查它（它没能力判断"没跑过的脚本是对的"）。
+2. **核对 XDG 相关假设**：RTK 配置目录是否真是 `~/.config/rtk/`、`~/.local/bin` 是否在
+   `PATH`、shell rc 该改哪一个（`.bashrc` / `.zshrc` / `.profile`）。
+3. **`install.sh` 里取 RTK Linux 二进制那一段**（`rtk-linux-<arch>` → GitHub Releases）
+   需要真实网络与 CPU 架构验证，目前只有代码路径正确。
+4. **`launcher/dsh-web.sh`** 的 `xdg-open` 与"服务就绪探测"需要在真实桌面环境下验证。
+
+### Windows 特有、Linux 上**不必照搬**的部分
+
+`.ps1` 必须带 UTF-8 BOM（PowerShell 5.1 + 代码页 936 的坑）、C# 启动器（依赖 `csc` 与 PE 二进制）、
+`%APPDATA%\rtk\`、`%LOCALAPPDATA%\Programs\dsh-launcher`、桌面 `.lnk` 快捷方式、
+`[Environment]::SetEnvironmentVariable(...,"User")` 改 PATH。
+
 ## 🚀 即用即插：装完必自证
 
 ```powershell
-# Windows
+# Windows —— 已在真机验证
 powershell -ExecutionPolicy Bypass -File .\install.ps1 -NonInteractive
 ```
 
 ```bash
-# Ubuntu / Debian
+# Ubuntu / Debian —— ⚠️ 未经验证，属"待人补齐"的脚手架
 bash install.sh
 ```
 

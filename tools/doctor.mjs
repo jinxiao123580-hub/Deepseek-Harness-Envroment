@@ -357,9 +357,22 @@ if (globalFileName) {
   }
   // 这是一个真实踩过的坑：文档曾让人写 ~/AGENTS.md，而 DSH 从不读它
   if (legacy !== globalFile && existsSync(legacy)) {
-    warn('instruction.stale-twin', '存在"影子"指令文件',
-      `${legacy} 存在，但 DSH 读的是 ${globalFile} —— 这个影子文件里的规则**不会生效**（历史文档的错误引导留下的）`,
-      `人工确认后删除或合并：${legacy}`);
+    // 【2026-09-19 收紧】影子文件有三种状态，不能一律 WARN：
+    //   · 内容是别家工具（Codex/Claude Code）的规则 → 正常，报 OK 并说明
+    //   · 内容已被改写成"指路牌"（明说自己不被 DSH 读、并指向正确路径）→ 已修好，报 OK
+    //   · 内容是**看起来像 DSH 规则、但 DSH 永远读不到**的东西 → 真隐患，报 WARN
+    // 一律 WARN 会让用户学会忽略 WARN，那比没有这条检查更糟。
+    const lt = readText(legacy);
+    const isPointer = /\$DSH_HOME\/AGENTS\.md|\.dsh\/AGENTS\.md/.test(lt)
+      && /不被|不会|not read|未读/.test(lt);
+    if (isPointer) {
+      ok('instruction.stale-twin', '存在"影子"指令文件',
+        `${legacy} 存在，但已被改写成"指路牌"（明确说明自己不被 DSH 读取，并指向 ${globalFile}）→ 不再误导，保留无妨`);
+    } else {
+      warn('instruction.stale-twin', '存在"影子"指令文件',
+        `${legacy} 存在，但 DSH 读的是 ${globalFile} —— 如果这个影子文件里写的是**给 DSH 看的规则**，那它不会生效（历史文档的错误引导留下的）`,
+        `人工确认后删除或合并：${legacy}（若它是 Codex / Claude Code 等别家工具的规则，忽略本警告即可）`);
+    }
   }
 }
 
@@ -448,22 +461,34 @@ if (existsSync(settingsPath)) {
     unver('plugin.subagent-guard', '第三方子代理插件的护栏', `巡检工具 exit ${r.code}: ${r.out.slice(0, 300)}`);
   }
 
-  // 泛化：任何名字里带 subagent/ralph/workflow 的本地插件都可能再开一条我们没覆盖的委派路径
+  // 泛化：任何名字里带 subagent/ralph/workflow 的本地插件都可能再开一条我们没覆盖的委派路径。
+  //
+  // 【2026-09-19 收紧】这一条**已经从"泛泛提醒"缩到"只报未被真检查覆盖的"**：
+  //   · 被 plugin.subagent-guard（上面那条，真跑 check-ya-subagent.mjs、真读插件 schema）验证过的插件，
+  //     不再在这里重复告警 —— 同一件事报两遍、其中一遍还是猜的，只会训练用户忽略 WARN。
+  //   · 永久 WARN 的危害大于没有这条检查：用户学会"反正总有 WARN"，真出问题时就看不见了。
+  const verified = r.code === 0 && hasYa ? /yet-another-subagent/i : null;
   const suspicious = [];
   for (const nm of profile.all) {
     const pj = join(DSH_HOME, 'profiles', nm, 'package.json');
     if (!existsSync(pj)) continue;
     try {
       const deps = { ...(JSON.parse(readText(pj)).dependencies || {}), ...(JSON.parse(readText(pj)).devDependencies || {}) };
-      for (const d of Object.keys(deps)) if (/subagent|ralph|workflow/i.test(d)) suspicious.push(`${nm}:${d}`);
+      for (const d of Object.keys(deps)) {
+        if (!/subagent|ralph|workflow/i.test(d)) continue;
+        if (verified && verified.test(d)) continue; // 已被真检查覆盖
+        suspicious.push(`${nm}:${d}`);
+      }
     } catch { /* 忽略 */ }
   }
   if (suspicious.length) {
     warn('plugin.delegation-surface', '可能新增委派路径的本地插件',
-      `${suspicious.join('、')} —— 名字暗示会再开委派面。**cordis preset 里的 toolFilter.deny 管不到插件自己注册的工具名**，请确认它们的工具名也在 deny 里（本仓库踩过一次）`,
+      `${suspicious.join('、')} —— 名字暗示会再开委派面**且没有专门的检查覆盖它**。` +
+      `**cordis preset 里的 toolFilter.deny 管不到插件自己注册的工具名**，请确认它们的工具名也在 deny 里（本仓库踩过一次）`,
       `dsh --profile ${profile.name || '<profile>'} --dump-config   # 看合成后真正加载了哪些工具`);
   } else {
-    ok('plugin.delegation-surface', '可能新增委派路径的本地插件', '没有名字暗示委派面的插件');
+    ok('plugin.delegation-surface', '可能新增委派路径的本地插件',
+      verified ? '名字暗示委派面的插件都已被专门检查覆盖（见上一条）' : '没有名字暗示委派面的插件');
   }
 }
 
