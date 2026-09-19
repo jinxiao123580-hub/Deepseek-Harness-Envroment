@@ -23,6 +23,7 @@
 # 并且同样遵守「不擅自升级 / 不擅自装第三方 / 不擅自改别的工具」：
 #   升 dsh 要 --upgrade-dsh，装余额插件要 --install-plugin，
 #   跑 rtk init --global（会写 ~/.claude/CLAUDE.md）要 --rtk-init-global。
+#   装提交前闸门（会写 .git/hooks/pre-commit）要 --install-git-hooks。
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,6 +33,7 @@ NO_DSH=0; NO_PLUGIN=0; NO_RTK=0; NO_LAUNCHER=0; NO_SETTINGS=0
 NO_PRESET=0; NO_HANDOFF=0; NO_SCRIPTS=0
 FORCE_SETTINGS=0; FORCE_RTK_CONFIG=0; DRY_RUN=0
 UPGRADE_DSH=0; INSTALL_PLUGIN=0; RTK_INIT_GLOBAL=0; HARDEN_DEFAULT_PRESET=0
+INSTALL_GIT_HOOKS=0
 PROFILE="web"
 
 FAILURES=()
@@ -53,6 +55,7 @@ while [ $# -gt 0 ]; do
     --install-plugin) INSTALL_PLUGIN=1 ;;
     --rtk-init-global) RTK_INIT_GLOBAL=1 ;;
     --harden-default-preset) HARDEN_DEFAULT_PRESET=1 ;;
+    --install-git-hooks) INSTALL_GIT_HOOKS=1 ;;
     --profile) PROFILE="${2:-web}"; shift ;;
     --dry-run) DRY_RUN=1 ;;
     -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
@@ -331,6 +334,52 @@ if [ "$NO_LAUNCHER" = 0 ]; then
   say "[i] Windows 的 C# Launcher.exe 在 Linux 上不可用（csc / PE 二进制）。"
 else skipstep "Linux 启动脚本" "--no-launcher"; fi
 
+# ---------------- 8. 提交前闸门（可选） ---------------- #
+# 只装**与机器无关**的检查（编码 + 换行）。机器相关的检查绝不能进提交门：
+# 别人 clone 下来还没装 kit 时必然失败，那会把闸门变成绊脚石而不是护栏。
+if [ "$INSTALL_GIT_HOOKS" = 1 ]; then
+  STEP_TOTAL=$((STEP_TOTAL+1))
+  step "安装提交前闸门 (.git/hooks/pre-commit)"
+  HOOK_SRC="$ROOT/tools/git-hooks/pre-commit"
+  HOOK_DST="$ROOT/.git/hooks/pre-commit"
+  if [ ! -d "$ROOT/.git/hooks" ]; then
+    say "[i] 这里不是 git 仓库（没有 .git/hooks），跳过"
+  elif [ ! -f "$HOOK_SRC" ]; then
+    say "[i] 找不到 $HOOK_SRC，跳过"
+  else
+    run "复制 tools/git-hooks/pre-commit -> .git/hooks/pre-commit" \
+      bash -c "cp '$HOOK_SRC' '$HOOK_DST' && chmod +x '$HOOK_DST'"
+    say "已装: .git/hooks/pre-commit（提交前跑 node tools/check-encoding.mjs）"
+    say "[i] 紧急绕过：git commit --no-verify"
+  fi
+else
+  # 注意：这里**故意不调 step**，否则会与上面已有的编号错位。
+  say "提交前闸门未安装（要装：--install-git-hooks）"
+fi
+
+# ---------------- 9. 自证：跑一遍巡检 ---------------- #
+# 装完不算完 —— **必须自证**。doctor 会重新推导 dsh 的当前事实（全局指令文件叫什么、
+# shipped preset 的 sha、谁的代码里引用了哪个 settings 段），而不是相信本脚本"我以为装对了"。
+STEP_TOTAL=$((STEP_TOTAL+1))
+step "自证巡检（tools/doctor.mjs）"
+if [ "$DRY_RUN" = 1 ]; then
+  # doctor 只读机器状态，但它会写状态文件（$DSH_HOME/.dsh-migration-kit.json）——
+  # 干跑的承诺是"不会改动任何文件"，所以这里只报告不执行。
+  say "[dry-run] node tools/doctor.mjs（自证巡检；会写状态文件，故干跑不执行）"
+elif [ -f "$ROOT/tools/doctor.mjs" ]; then
+  node "$ROOT/tools/doctor.mjs"
+  doctor_rc=$?
+  if [ "$doctor_rc" -ne 0 ]; then
+    fail "自证巡检" "doctor 报出 FAIL（退出码 $doctor_rc）—— 逐条看上面的 ❌，修法就写在每一项下面"
+    say "可安全自动修的两条：node tools/doctor.mjs --fix-safe   然后**再跑一次**确认"
+  else
+    say "巡检通过：dsh 版本 / 全局指令文件路径 / 规则块 / preset 指纹 / 默认 preset 护栏"
+    say "          / 第三方子代理护栏 / settings 接线 / 档位合法性 / 脚本前置 / 编码换行"
+  fi
+else
+  say "跳过：找不到 tools/doctor.mjs"
+fi
+
 # ---------------- 收尾 ---------------- #
 printf '\n%s=== 完成 ===%s\n' "$c_cyan" "$c_off"
 if [ "${#FAILURES[@]}" -gt 0 ]; then
@@ -342,6 +391,8 @@ fi
 cat <<'EOF'
 
 下一步:
+  0. **先跑巡检确认全部落地**：node tools/doctor.mjs
+     （升级 dsh、改 preset、改 settings 之后都要再跑一次；出问题看 docs/升级与冲突处理.md）
   1. 若没填 Key：编辑 ~/.dsh/.credentials.yaml（参照 config/.credentials.example.yaml，保留已有 records: 段）。
   2. 启动：`dsh web` 或 `dsh-web`（默认 http://127.0.0.1:3080）。
   3. 验收禁递归：开一个新会话派一次子代理，然后 `python3 ~/.dsh-analysis/verify_leash.py`。
@@ -351,6 +402,7 @@ cat <<'EOF'
        --install-plugin     装 GitHub 上的余额插件 dsh-whale-widget
        --rtk-init-global    跑 rtk init --global（会改 ~/.claude/CLAUDE.md）
        --harden-default-preset  把护栏打进你**实际在用**的那个 preset（会备份）
+       --install-git-hooks  装 .git/hooks/pre-commit（提交前跑编码/换行闸门）
   6. 本机默认 preset 是 router-standard 的话，standard-leash **不会**自动成为默认
      （合并器只增不删，会保留你已有的 agent-presets.default）。
      要真正堵住子代理扇出，需要把 4 项护栏移植进 router-standard —— 见

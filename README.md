@@ -10,6 +10,73 @@
 > 合并过程中发现的问题、改进与 Windows/Ubuntu 差异，全部记在
 > **[`docs/改进与问题记录.md`](docs/改进与问题记录.md)** —— 部署前请先读它。
 
+## 🚀 即用即插：装完必自证
+
+```powershell
+# Windows
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -NonInteractive
+```
+
+```bash
+# Ubuntu / Debian
+bash install.sh
+```
+
+两个安装脚本都是**只增不删**、可重复跑（幂等），并且**最后一步会自动跑自证巡检**。
+
+```bash
+node tools/doctor.mjs          # 装完自己再跑一次确认
+```
+
+`doctor` 是这套东西的核心。它**不信任任何写死的路径**，全部从"当前装的 dsh"现推：
+dsh 版本漂移、全局指令文件到底叫什么、规则块在不在、preset 副本指纹、
+默认 preset 的护栏、第三方子代理插件的护栏、settings 段有没有被插件接线、
+档位是否合法、分析脚本前置条件、编码与换行。
+
+| 状态 | 含义 | 要做什么 |
+|---|---|---|
+| ✅ `OK` | 已验证 | 不用管 |
+| ⚠️ `WARN` | 有风险或环境偏差 | 看一眼 |
+| ❌ `FAIL` | 断言被推翻，**会静默失效** | **必修** |
+| 🕳️ `INERT` | 配置在，但没有任何插件接线 → **存在但不生效** | 确认该由谁加载 |
+| ❓ `UNVERIFIABLE` | 无法再验证这条断言 | **人工确认，别当通过** |
+
+## 🔧 升级 dsh 之后怎么办
+
+> **本套件不记录"事实"，只记录"如何重新推导事实"。**
+> 所以升级不会让你撞上"配置悄悄失效、而且没有任何机制提醒你"。
+
+```bash
+npm install -g @deepseek-ai/dsh        # 升级
+node tools/doctor.mjs                  # 报 dsh.drift，提醒所有指纹可能已失效
+node tools/doctor.mjs --fix-safe       # 自动修可安全修的两条（带备份）
+# 重启 dsh web（preset / 插件类改动需要重载 profile）
+node tools/doctor.mjs                  # **再跑一次确认** —— 修复本身也要被验证
+```
+
+出问题先查 **[`docs/升级与冲突处理.md`](docs/升级与冲突处理.md)**：
+「症状 → 检查项 → 根因 → 修法」一张表，外加五类真实冲突的详解。
+
+## 🪝 建议装上提交前闸门
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -InstallGitHooks   # Windows
+```
+
+```bash
+bash install.sh --install-git-hooks                                       # Ubuntu
+```
+
+它只拦**与机器无关**的两个跨平台真故障：
+
+- `.ps1` 丢 UTF-8 BOM → Windows PowerShell 5.1 在代码页 936 下按 GBK 解码中文，
+  引号字节被凑坏 → 报 `"missing the terminator"`。**看起来像代码写错了，其实是编码。**
+- `.sh` 变 CRLF → Ubuntu 上 shebang 变成 `/usr/bin/env bash^M: bad interpreter`。
+
+**这两个在本次开发里真的反复发生过**（`.ps1` 的 BOM 被弄丢过三次），所以不是形式主义。
+机器相关的检查**不进**提交门 —— 别人 clone 下来还没装 kit 时那些必然失败，
+那类检查用 `node tools/doctor.mjs --strict`（发布前）。
+
 ## ⚠️ 本仓库的验证基准（读任何结论前先看这里）
 
 | 项 | 值 |

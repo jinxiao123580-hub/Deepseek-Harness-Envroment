@@ -34,6 +34,7 @@ param(
     [switch]$ForceSettings,     # 真的想整份覆盖 settings.yaml（仍会备份）
     [switch]$ForceLauncher,     # 即使检测到已装启动器也照放
     [switch]$ForceRtkConfig,    # 覆盖已有的 rtk config.toml / filters.toml
+    [switch]$InstallGitHooks,   # 装 .git\hooks\pre-commit 编码闸门（默认不装）
     [switch]$DryRun
 )
 $ErrorActionPreference = "Stop"
@@ -429,6 +430,67 @@ if (-not $NoLauncher) {
     } catch { Fail "launcher" $_.Exception.Message }
 } else { SkipStep "launcher" "-NoLauncher" }
 
+# ---------------- 8. 提交前闸门（可选） ---------------- #
+# 这条闸门只拦**与机器无关**的两个跨平台真故障：.ps1 缺 UTF-8 BOM、.sh 变 CRLF。
+# 机器相关的检查（preset 指纹、护栏、settings 接线…）**不能**进提交门 ——
+# 别人 clone 下来还没装 kit 时那些必然失败，会让所有人无法提交。那类用 doctor --strict。
+if ($InstallGitHooks) {
+    $script:StepTotal = $script:StepTotal + 1
+    Step "安装提交前闸门（.git\hooks\pre-commit）"
+    $hookSrc = Join-Path $root "tools\git-hooks\pre-commit"
+    $gitDir  = Join-Path $root ".git"
+    $hookDst = Join-Path $gitDir "hooks\pre-commit"
+    if (-not (Test-Path $hookSrc)) {
+        Fail "git hooks" "找不到 tools\git-hooks\pre-commit"
+    } elseif (-not (Test-Path $gitDir)) {
+        Say "跳过：$root 不是 git 仓库"
+    } elseif ($DryRun) {
+        Say "[dry-run] 把 $hookSrc 装到 $hookDst"
+    } else {
+        if (Test-Path $hookDst) {
+            $bak = "$hookDst.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+            Copy-Item $hookDst $bak -Force
+            Say "已有 pre-commit，先备份为 $(Split-Path -Leaf $bak)"
+        }
+        # 必须写成 LF 且不带 BOM：git 用 sh 执行它，CRLF 会让 shebang 直接失效
+        $body = ([System.IO.File]::ReadAllText($hookSrc)) -replace "`r`n", "`n"
+        [System.IO.File]::WriteAllText($hookDst, $body, (New-Object System.Text.UTF8Encoding($false)))
+        Say "已装。它只拦编码/换行；机器相关检查请用 node tools\doctor.mjs --strict"
+    }
+} else {
+    Say "提交前闸门未安装（要装：-InstallGitHooks）"
+}
+
+# ---------------- 9. 自证：跑一遍巡检 ---------------- #
+# 装完不算完 —— **必须自证**。doctor 会重新推导 dsh 的当前事实（全局指令文件叫什么、
+# shipped preset 的 sha、谁的代码里引用了哪个 settings 段），而不是相信本脚本"我以为装对了"。
+$script:StepTotal = $script:StepTotal + 1
+Step "自证巡检（tools\doctor.mjs）"
+$doctorPath = Join-Path $root "tools\doctor.mjs"
+if ($DryRun) {
+    # doctor 只读机器状态，但它会写状态文件（$DSH_HOME\.dsh-migration-kit.json）——
+    # 干跑的承诺是"不会改动任何文件"，所以这里只报告不执行。
+    Say "[dry-run] node tools\doctor.mjs（自证巡检；会写状态文件，故干跑不执行）"
+} elseif (Test-Path $doctorPath) {
+    # 注意：native 命令往 stderr 写、又被 2>&1 接进管道时，在 $ErrorActionPreference="Stop"
+    # 下会抛 NativeCommandError 并**终止整个脚本**（本仓库踩过一次，见 docs/改进与问题记录.md 4.12）。
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & node $doctorPath
+        $doctorRc = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $prevEap }
+    if ($doctorRc -ne 0) {
+        Fail "自证巡检" "doctor 报出 FAIL（退出码 $doctorRc）—— 逐条看上面的 ❌，修法就写在每一项下面"
+        Say "可安全自动修的两条：node tools\doctor.mjs --fix-safe   然后**再跑一次**确认"
+    } else {
+        Say "巡检通过：dsh 版本 / 全局指令文件路径 / 规则块 / preset 指纹 / 默认 preset 护栏"
+        Say "          / 第三方子代理护栏 / settings 接线 / 档位合法性 / 脚本前置 / 编码换行"
+    }
+} else {
+    Say "跳过：找不到 tools\doctor.mjs"
+}
+
 # ---------------- 收尾 ---------------- #
 Write-Host "`n=== 完成 ===" -ForegroundColor Cyan
 if ($script:Failures.Count -gt 0) {
@@ -439,6 +501,8 @@ if ($script:Failures.Count -gt 0) {
 }
 Write-Host ""
 Write-Host "下一步:" -ForegroundColor White
+Write-Host "  0. **先跑巡检确认全部落地**：node tools\doctor.mjs" -ForegroundColor Yellow
+Write-Host "     （升级 dsh、改 preset、改 settings 之后都要再跑一次；出问题看 docs\升级与冲突处理.md）" -ForegroundColor Yellow
 Write-Host "  1. 若没填 Key：运行 config\set-credentials.ps1，或把旧机 .credentials.yaml 私下拷到 %USERPROFILE%\.dsh\"
 Write-Host "  2. 启动：直接 ``dsh web``（默认 http://127.0.0.1:3080）。"
 Write-Host "  3. 验收禁递归：开一个新会话派一次子代理，然后"

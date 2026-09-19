@@ -1,0 +1,55 @@
+#!/bin/sh
+# 提交前闸门 —— 只跑**与机器无关**的检查。
+#
+# 为什么只跑编码/换行：
+#   机器相关的检查（preset 指纹、子代理护栏、settings 接线、dsh 版本漂移…）全部依赖
+#   "本机装了什么 dsh / 哪些插件"，在别人 clone 下来还没装 kit 的机器上**必然失败**。
+#   把它放进提交门 = 让所有人无法提交。那类检查的正确位置是：
+#       node tools/doctor.mjs            # 人工/巡检
+#       node tools/doctor.mjs --strict   # 发布前
+#
+# 这条闸门拦的是两个跨平台真故障（都静默、都极难从报错反推）：
+#   · .ps1 缺 UTF-8 BOM → Windows PowerShell 5.1 在代码页 936 下按 GBK 解码，
+#     中文串的引号字节被凑出来 → "The string is missing the terminator" / 结构解析崩
+#   · .sh 变 CRLF       → Ubuntu 上 shebang 变成 "/usr/bin/env bash^M: bad interpreter"
+#
+# 本次开发里 .ps1 的 BOM 被编辑器/工具**弄丢过三次**，每次症状都像"代码写错了"，
+# 所以这条闸门不是形式主义 —— 它拦的是真实反复发生的事故。
+#
+# 装：node tools/check-encoding.mjs 之外，用 install.ps1 -InstallGitHooks
+#     或 install.sh --install-git-hooks，或手工复制到 .git/hooks/pre-commit
+
+set -e
+
+root="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+cd "$root"
+
+if [ ! -f tools/check-encoding.mjs ]; then
+  echo "[pre-commit] 找不到 tools/check-encoding.mjs，跳过编码闸门" >&2
+  exit 0
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "[pre-commit] 没有 node，跳过编码闸门（这会让 .ps1 的 BOM 事故漏过去）" >&2
+  exit 0
+fi
+
+if node tools/check-encoding.mjs; then
+  exit 0
+fi
+
+cat >&2 <<'EOF'
+
+[pre-commit] 编码/换行闸门未过，已阻止提交。
+
+  自动修：  node tools/check-encoding.mjs --fix
+  然后复查：node tools/check-encoding.mjs
+
+这条闸门拦的是两个跨平台真故障：
+  · .ps1 缺 UTF-8 BOM → Windows PowerShell 5.1（代码页 936）按 GBK 解码中文，
+    引号被凑坏 → 报 "missing the terminator"，看起来像代码写错了，其实是编码
+  · .sh 变 CRLF       → Ubuntu 上 shebang 变 bad interpreter，脚本完全跑不起来
+
+紧急绕过：git commit --no-verify（但请之后补跑 --fix）
+EOF
+exit 1
