@@ -1,0 +1,30 @@
+{
+  "name": "dsh-profile-web",
+  "private": true,
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "@dsh-external/dsh-client-ui-skin-maid-atelier",
+        "@liustack/modlens",
+        "@dsh-external/dsh-super-injector",
+        "qq-mode-console",
+        "dsh-whale-widget",
+        "dsh-job-market"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-web-fetch-http": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-search-exa": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-search-perplexity": "0.1.0-rc.6",
+    "@dsh-external/dsh-client-ui-skin-maid-atelier": "link:C:/Users/10905/dsh-deep-whale/maid-atelier",
+    "@dsh-external/dsh-super-injector": "link:C:/Users/10905/dsh-super-injector-0.3.3",
+    "@liustack/modlens": "link:C:/Users/10905/AppData/Roaming/npm/node_modules/@liustack/modlens",
+    "dsh-whale-widget": "link:C:/Users/10905/dsh-whale-widget",
+    "dsh-job-market": "link:D:/Deepseek Harness/dsh-job-market",
+    "qq-mode-console": "link:C:/Users/10905/.dsh/plugins/qq-mode-console",
+    "schemastery": "^3.18.0"
+  }
+}

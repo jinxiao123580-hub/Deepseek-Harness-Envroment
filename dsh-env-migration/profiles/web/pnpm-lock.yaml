@@ -1,0 +1,111 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: false
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@deepseek-ai/dsh-web-fetch-http':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6
+      '@deepseek-ai/dsh-web-search-exa':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6
+      '@deepseek-ai/dsh-web-search-perplexity':
+        specifier: 0.1.0-rc.6
+        version: 0.1.0-rc.6
+      '@dsh-external/dsh-client-ui-skin-maid-atelier':
+        specifier: link:C:/Users/10905/dsh-deep-whale/maid-atelier
+        version: link:../../../dsh-deep-whale/maid-atelier
+      '@dsh-external/dsh-super-injector':
+        specifier: link:C:/Users/10905/dsh-super-injector-0.3.3
+        version: link:../../../dsh-super-injector-0.3.3
+      '@liustack/modlens':
+        specifier: link:C:/Users/10905/AppData/Roaming/npm/node_modules/@liustack/modlens
+        version: link:../../../AppData/Roaming/npm/node_modules/@liustack/modlens
+      dsh-job-market:
+        specifier: link:D:/Deepseek Harness/dsh-job-market
+        version: link:D:/Deepseek Harness/dsh-job-market
+      dsh-whale-widget:
+        specifier: link:C:/Users/10905/dsh-whale-widget
+        version: link:../../../dsh-whale-widget
+      qq-mode-console:
+        specifier: link:C:/Users/10905/.dsh/plugins/qq-mode-console
+        version: link:../../plugins/qq-mode-console
+      schemastery:
+        specifier: ^3.18.0
+        version: 3.18.0
+
+packages:
+
+  '@deepseek-ai/cosmokit@1.8.2':
+    resolution: {integrity: sha512-muBOKtSrUKU5m/xpq8ZXWL6hQ/jgd4PhU2PqH97bcxIiLEJfNwZOGQEx4t/aS/GgxRAR+ra9pMHPMtTHU4sqqA==}
+
+  '@deepseek-ai/dsh-web-fetch-http@0.1.0-rc.6':
+    resolution: {integrity: sha512-E56Idmwemn+92ZxOSncDYl6mjPQ/EluWZgAzi6jpPOyZehIXQJ39XiF+NH85mRug8rriy8RdWY0AZcu8AhFaiw==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-invariants': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-timeout': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-web': ^0.1.0-rc.6
+
+  '@deepseek-ai/dsh-web-search-exa@0.1.0-rc.6':
+    resolution: {integrity: sha512-UYBFTguAawdaIgNAct7d6Q2mRSXDHZCt5IRPKfsQ43lH2K4tQ05+ykE99CyP8h8GjqaeOI2NOinMKHPIZZkhKQ==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-invariants': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-launch-environment': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-web': ^0.1.0-rc.6
+
+  '@deepseek-ai/dsh-web-search-perplexity@0.1.0-rc.6':
+    resolution: {integrity: sha512-k/Nz9VAbfCH1q2+K162CPU2cGY7aEUd5rAIcTZOhjN2voQhv2E2IdqpNbu6BWXONWFJnkXgTcvSuxtExN5eV7Q==}
+    peerDependencies:
+      '@deepseek-ai/cordis': ^4.0.1
+      '@deepseek-ai/dsh-invariants': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-launch-environment': ^0.1.0-rc.6
+      '@deepseek-ai/dsh-web': ^0.1.0-rc.6
+
+  '@deepseek-ai/schemastery@3.18.1':
+    resolution: {integrity: sha512-Qn0FCSwCQnpnj6SB31I6i2sIKgKWnkbJM8O0EU91Gv2UsYVvtZTl6IA0sCwk2e2MZf5S8w5hpq9QkeVvK9qwxg==}
+
+  '@standard-schema/spec@1.1.0':
+    resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
+
+  cosmokit@1.8.1:
+    resolution: {integrity: sha512-PDBv4l90xZKrUsZ0vtoycgZpO/j4iFsqJXrAxsyBDsnQRI7ZMJXIjgDJsKNjd5L8jnVnnlrDCdhkFbTncgCVjQ==}
+
+  schemastery@3.18.0:
+    resolution: {integrity: sha512-Jw2uxjoyyqc/yeurmChUEc/jbi8GsrdXV/KmqRUDZXJAXAmrJiPsz8vKa17l/VckyzljHZ9oGaul443CQiXxtA==}
+
+snapshots:
+
+  '@deepseek-ai/cosmokit@1.8.2': {}
+
+  '@deepseek-ai/dsh-web-fetch-http@0.1.0-rc.6':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.1
+
+  '@deepseek-ai/dsh-web-search-exa@0.1.0-rc.6':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.1
+
+  '@deepseek-ai/dsh-web-search-perplexity@0.1.0-rc.6':
+    dependencies:
+      '@deepseek-ai/schemastery': 3.18.1
+
+  '@deepseek-ai/schemastery@3.18.1':
+    dependencies:
+      '@deepseek-ai/cosmokit': 1.8.2
+      '@standard-schema/spec': 1.1.0
+
+  '@standard-schema/spec@1.1.0': {}
+
+  cosmokit@1.8.1: {}
+
+  schemastery@3.18.0:
+    dependencies:
+      '@standard-schema/spec': 1.1.0
+      cosmokit: 1.8.1

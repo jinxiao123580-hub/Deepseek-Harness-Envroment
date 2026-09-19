@@ -4,6 +4,7 @@
 
 1. **成本治理 + 上下文交接（handoff）体系** —— 所有数字都来自本机会话日志实测或本机源码，命令可复现。
 2. **Windows 迁移套件** —— 一键安装脚本、启动器、RTK（Rust Token Killer）配置。
+3. **[dsh 环境迁移](dsh-env-migration/README.md)** —— 插件（下载 15+ / 自制 7）、skills（43 个三分类）、配置与 profile 接线的完整快照 + 恢复手册（2026-09-19）。
 
 > **本 README 是 2026-09-19 的合并版。** 仓库此前有两条**互不相关**的历史
 > （`master` = 迁移套件，`main` = 成本治理），现在合到 `unify` 分支。
@@ -223,6 +224,7 @@ node tools/show-effort-levels.mjs zai glm-5.2
 | [`handoff/`](handoff/) | 交接约定全文 + 术语表 + INDEX 模板 + ADR-0001 + `AGENTS.block.md`（可粘贴规则块） |
 | [`examples/`](examples/) | 脱敏真实样例 + 它演示的 **9 类交接文档病症** |
 | [`presets/standard-leash/`](presets/standard-leash/) | **禁递归 + 子代理降档 + persona** 的 preset（脚本生成，带来源指纹） |
+| [`dsh-env-migration/`](dsh-env-migration/README.md) | **dsh 环境迁移快照**：`settings.yaml`/AGENTS/presets、5 个 profile 接线四件套、下载插件总表（来源/安装/用法）、自制插件源码 7 项、43 个 skill 分类快照与恢复步骤。**不含任何凭据** |
 | [`config/`](config/) | `settings.yaml` 可合并片段（成本治理 / 子代理专用路由 / preset 开关）+ 凭据助手 |
 | [`scripts/`](scripts/) | 度量与验收脚本（成本解剖、周复盘、leash 验收、档位与缓存实测探针） |
 | [`tools/`](tools/) | 运维脚本：设置合并（`merge-settings.mjs`）、编码校验（`check-encoding.mjs`）、preset 重新生成（`regen-standard-leash.mjs`）、**把护栏打进任意已有 preset**（`harden-preset.mjs`） |

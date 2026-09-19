@@ -1,0 +1,68 @@
+{
+  "name": "dsh-job-market",
+  "version": "0.1.0",
+  "description": "AI job-market analysis and learning-roadmap workflow for DeepSeek Harness: real JD collection, cross-platform dedupe, structured JD parsing, skill normalization, market statistics, personal skill profile, gap analysis, explainable priorities, and 4/8/12-week learning roadmaps.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
+    },
+    "./skill/job-market.skill": {
+      "types": "./dist/src/skill/job-market.skill.d.ts",
+      "default": "./dist/src/skill/job-market.skill.js"
+    }
+  },
+  "files": [
+    "dist/src",
+    "taxonomy",
+    "dsh.bundle",
+    "cordis.patch.yml",
+    "LICENSE",
+    "README.md",
+    "docs"
+  ],
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "job-market",
+    "learning-roadmap",
+    "skill-taxonomy",
+    "gap-analysis"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-skill": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-workspace": ">=0.1.1-rc.2",
+    "@deepseek-ai/dsh-llm": ">=0.1.1-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^24.10.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "_comment:test": "必须用 glob 形式；`node --test dist/test/`（目录形式）在 Node 24 下会报 MODULE_NOT_FOUND。",
+    "test:unit": "node --test \"dist/test/*.test.js\"",
+    "test:smoke": "node scripts/smoke.mjs",
+    "test": "npm run build && npm run test:unit && npm run test:smoke"
+  }
+}

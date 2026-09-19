@@ -1,0 +1,308 @@
+ui-onboarding:
+  welcomeNoticeVersion: 2026-08-13.1
+llm-pi-ai:
+  providers:
+    google:
+      apiKeyEnv: GEMINI_API_KEY
+    volcengine-coding-plan:
+      displayName: 火山 Coding Plan
+      apiKeyEnv: VOLCENGINE_CODING_PLAN_API_KEY
+      api: openai-completions
+      baseURL: https://ark.cn-beijing.volces.com/api/coding/v3
+      models:
+        - id: ark-code-latest
+          name: 火山 Coding Plan（控制台所选模型）
+    volcengine-agent-plan:
+      displayName: 火山 Agent Plan
+      apiKeyEnv: VOLCENGINE_AGENT_PLAN_API_KEY
+      api: openai-responses
+      baseURL: https://ark.cn-beijing.volces.com/api/plan/v3
+      models:
+        - id: deepseek-v4-flash
+        - id: deepseek-v4-pro
+    aliyun-bailian:
+      displayName: 阿里云百炼
+      apiKeyEnv: DASHSCOPE_API_KEY
+      api: openai-completions
+      baseURL: https://dashscope.aliyuncs.com/compatible-mode/v1
+      models:
+        - id: deepseek-v4-flash
+        - id: deepseek-v4-pro
+    siliconflow:
+      displayName: 硅基流动
+      apiKeyEnv: SILICONFLOW_API_KEY
+      api: openai-completions
+      baseURL: https://api.siliconflow.cn/v1
+      models:
+        - id: deepseek-ai/DeepSeek-V4-Flash
+    deepseek-qq:
+      displayName: DeepSeek QQ 独立
+      apiKeyEnv: DEEPSEEK_QQ_API_KEY
+      api: openai-completions
+      baseURL: https://api.deepseek.com
+      compat:
+        thinkingFormat: deepseek
+        supportsDeveloperRole: false
+        maxTokensField: max_tokens
+      models:
+        - id: deepseek-v4-flash-vision-exp
+          name: DeepSeek V4 Flash Vision（QQ 专用）
+          input:
+            - text
+            - image
+          reasoningEfforts:
+            high: high
+            max: max
+        - id: deepseek-v4-flash
+          name: DeepSeek V4 Flash（QQ 专用）
+          input:
+            - text
+          reasoningEfforts:
+            high: high
+            max: max
+        - id: deepseek-v4-pro
+          name: DeepSeek V4 Pro（QQ 专用）
+          input:
+            - text
+          reasoningEfforts:
+            high: high
+            max: max
+    zai:
+      displayName: 智谱 GLM Coding Plan (Lite)
+      apiKeyEnv: ZAI_API_KEY
+      api: openai-completions
+      baseURL: https://open.bigmodel.cn/api/coding/paas/v4
+      compat:
+        thinkingFormat: zai
+        supportsDeveloperRole: false
+      models:
+        - id: glm-5.3
+          name: GLM 5.3 (决策型 · high)
+          contextWindow: 200000
+          maxTokens: 128000
+          input: [ text ]
+          reasoningEfforts:
+            "off": null
+            "low": low
+            "high": high
+            "max": max
+        - id: glm-5.3-flash
+          name: GLM 5.3 Flash (执行型主力 · low)
+          contextWindow: 200000
+          maxTokens: 128000
+          input: [ text ]
+          reasoningEfforts:
+            "off": null
+            "low": low
+            "high": high
+            "max": max
+    deepseek-cheap:
+      displayName: DeepSeek Flash (thinking off · 子代理)
+      apiKeyEnv: DEEPSEEK_API_KEY
+      api: openai-completions
+      baseURL: https://api.deepseek.com
+      reasoning: "off"
+      models:
+        - id: deepseek-flash
+          name: DeepSeek V4.1 Flash (no thinking)
+          contextWindow: 1000000
+          maxTokens: 128000
+          input: [ text ]
+          reasoningEfforts:
+            "off": null
+            "high": high
+            "max": max
+
+agent-default-model:
+  provider: zai
+  model: glm-5.3-flash
+  reasoningEffort: high
+  # 2026-09-19 分工定版：GLM(Lite 订阅)= 主力执行 glm-5.3-flash(建议 low，重活可 high)；
+  #   决策型换 glm-5.3 + high。DeepSeek(官方 API 按量)= 子代理降档(deepseek-cheap 关思考)
+  #   + GLM 限速时兜底 + 超长上下文(1M)任务，届时切 {provider: deepseek-official, model: deepseek-flash}。
+  # zai provider 已补全(2026-09-19)：coding 端点 open.bigmodel.cn/api/coding/paas/v4，
+  #   glm-5.3 / glm-5.3-flash 均 off 不可用(off: null)，档位 low/high/max。
+  # 历史备注：曾因 off 缺失整条切回 DeepSeek 线(deepseek-v4-flash-vision-exp, 1M ctx)；
+  #   现按"订阅包量优先烧"策略回归 GLM 主力。
+  # 已核实（2026-09-18，来自今日会话的 request/context 事件）：
+  #   本 model 实际路由到 deepseek-v4-flash-vision-exp，contextWindow = 1000000。
+  #   contextWindow 是 1M 而不是 128K/256K —— 这一条决定了所有压缩阈值的含义，
+  #   详见文件末尾 compaction-basic 段。
+
+  # 超大工具输出落盘。
+  # 源码依据 dsh-spill-policy/lib/index.js:
+  #   const name = "spill-policy";
+  #   const Config = z.object({ maxInlineBytes: z.number() });
+  # 关键：未配置 maxInlineBytes 时该插件【不注册任何东西】= 真 no-op，
+  # 于是网页抓取 / bash 输出 / 子代理报告会整段永久驻留上下文，并被之后每一轮重复计费。
+  # 行为：超出 8 KB 后全文存入会话级 spill 产物，模型只看到
+  #       "头尾预览 + 落盘路径 + 取回提示"，可用 read offset/limit 或 grep 取回。
+  # 例外：read 工具被刻意排除（防 read -> spill -> read again 死循环）。
+spill-policy:
+  maxInlineBytes: 8192
+agent-presets:
+  default: router-standard
+ui-theme:
+  preference: system
+
+# ── yet-another-subagent：web-3 上【真正】提供 subagent 工具的插件 ──────────────
+#
+# 【为什么护栏必须写在这里】
+# 本机活着的 profile 是 web-3（进程: dsh --profile web-3 --port 0 --no-open）。
+# 该 profile 下 @huanlin/dsh-plugin-yet-another-subagent 的 cordis.patch.yml 把
+# 官方 tool-subagent 关掉了，并声明由它自己接管 `subagent` 这个工具名：
+#     - id: tool-subagent
+#       disabled: true
+# 所以在 ~/.dsh/.agent-presets/router-standard/agent.cordis.yml 里给
+# tool-subagent 那一行加的 maxDepth / agentOptions / toolFilter / persona
+# 【在 web-3 上完全无效】—— 那个插件根本没被加载。
+# 旁证：本会话 `subagent` 工具的描述是 profile 式
+#   （Available profiles: - "general": General），而官方工具没有 profile 概念。
+# 该插件自己的默认值是：model auto（不降档）/ persona inherit / toolFilter none /
+# maxDepth 3 —— 也就是前面记录的那次 ¥8.34 扇出事故的成本结构。
+#
+# 【写这一层的依据（都查过源码，不是猜的）】
+# · 命名空间常量取自插件自己的导出：lib/index.js  `SETTINGS_NAMESPACE = "ya-subagent"`
+# · 持久化位置见插件 docstring（lib/types/profile-store.d.ts）：
+#     "Backed by ctx.settings ... persists to $DSH_HOME/settings.yaml under the
+#      `ya-subagent` namespace; falls back to a plain Map in headless assemblies"
+# · 形状经过插件自己的 Config schema 校验通过，并做了负例反证
+#   （maxDepth: -1 被拒："expected number >= 0 but got -1"），所以这个"通过"是有意义的
+# · dsh-settings/lib/index.js:3,219 提示：插件注册命名空间 schema，**非法 section 会让
+#   注册失败**，所以改这里必须保持形状正确，不能随手写。
+#
+# 【生效时机】插件在加载 profile 时读本 section → 需要重载 profile 或重启 dsh web 才生效。
+# 【代价】若在该插件的 Web 设置页里增删改 profile，它会把整个 ya-subagent 段整体写回，
+#   可能覆盖下面这段护栏；届时把本段重贴即可（或改完设置页后再核对一次）。
+#
+# 【四项护栏，与 router-standard 里那套等义】
+#   maxDepth: 1                 子代理不能再派子代理
+#   model manual deepseek-cheap 子代理降档到"关思考"的 Flash（省钱的另一半）
+#   toolFilter deny             兜底：把 workflow / ralph 从子代理工具面摘掉。
+#                               2026-09-19 实测：这两个确实不可见；但 `subagent` 仍可见，
+#                               拦它的是上面的 maxDepth 1（报 "subagent depth 2 exceeds maxDepth 1"）。
+#   persona                     执行型子代理的硬规则（≤10 行回报 + 落盘报告）
+ya-subagent:
+  generalFixed: true
+  profiles:
+    - id: general
+      label: General
+      model:
+        kind: manual
+        provider: deepseek-cheap
+        model: deepseek-flash
+      persona:
+        kind: custom
+        text: |-
+          你是被派来执行具体任务的执行型子代理。硬规则：
+          1. 只做交给你的那一件事，不扩大范围；需要新信息就用工具自己查。
+          2. 不把工作再委派出去：你没有 subagent 工具，也不要尝试绕过。
+          3. 本地检索优先（grep/read/glob），最多 2 次网页查询。
+          4. 详细结果写进 <cwd>/.handoff/reports/<YYYYMMDD>-<slug>.md，
+             回复父代理时只给 ≤10 行摘要 + 报告绝对路径 + 不确定项。
+          5. 不创建 $HOME 顶层新目录；产物放项目目录或上述报告目录。
+      toolFilter:
+        kind: deny
+        tools:
+          - subagent
+          - subagent_fork
+          - workflow
+          - ralph
+      maxDepth: 1
+      backgroundMode: continuable
+      builtin: true
+
+# 上下文压缩阈值（2026-09-18 重新核算）。
+# 触发点 = floor(contextWindow × thresholdRatio)。
+#
+# 【关键事实】本机实际 contextWindow = 1,000,000（deepseek-v4-flash-vision-exp，
+# 来自今日会话的 request/context 事件），不是 128K。
+#   0.8  -> 800K 才压缩
+#   0.35 -> 350K 才压缩   <- 当前值
+# 所以"0.35 提前触发"这个说法是错的：在 1M 窗口下 35% = 35 万 token，触发得极晚。
+# 这解释了为什么本机历史上会有会话冲到 792K 才被压缩。
+#
+# 成本机制：cacheRead 占全天 token 的 96.65%（53,678,720 / 55,537,540），
+# 每一轮都要重读整个上下文。上下文越大，该轮 cacheRead 越贵。降低压缩点是
+# 唯一能同时压低"每轮上下文规模"和"轮数"的杠杆。
+#
+# 取 0.45：1M × 0.45 = 450K 触发。比 350K 更早，同时给 1M 窗口留出足够余量，
+# 避免在长会话尾部频繁触发压缩（每次压缩本身也是一次完整请求）。
+# retainRatio 保持默认 0.16 < 0.45，满足校验（否则插件在解析阶段 throw）。
+compaction-basic:
+  thresholdRatio: 0.45
+
+# ── ACP（Active Context Pruning，billion-context-dsh）──────────────────────
+# 本机压缩的真正后端。源码依据
+# C:\Users\10905\.dsh\profiles\web-3\node_modules\billion-context-dsh\dist\settings.d.ts:
+#   export declare const ACP_SETTINGS_NAMESPACE = "compaction-acp";
+#   SETTINGS_KEYS = ['modelContextLimit','autoModelContextLimit',
+#                    'nudgeMinContextLimitPct','nudgeMaxContextLimitPct',
+#                    'nudgeEmergencyThresholdPct','autoNudge']
+# 该文件的注释原文：
+#   "Wires the engine's scalar knobs into the host's user-settings layer
+#    (~/.dsh/settings.yaml, section `compaction-acp`) ... so editing the file
+#    applies to RUNNING sessions without a restart."
+#   "Absent = auto-detection mode (probe the model's real window)."
+#
+# 【为什么必须显式设 modelContextLimit】
+# 不设时 ACP 自动探测模型真实窗口 —— 本机探测到的是 1,000,000
+# （deepseek-v4-flash-vision-exp）。于是：
+#   - ACP 的 nudge 要等到上下文的 0.45~0.70（45 万~70 万 token）才提醒压缩
+#   - 也就是会话可以合法地涨到几十万 token
+#   - 而实测「平均每轮 cacheRead = 74,494 tokens」—— 上下文越大，这一项越贵
+# cacheRead 占全天 token 的 96.65%，所以压住上下文规模就是压住主要成本。
+#
+# 【实测数据（2026-09-18，1000 次主 agent 请求）】
+#   平均每轮 cacheRead = 74,494，平均未缓存输入 = 1,893
+#   前缀变更的请求（125 次）平均未缓存输入 2,886 = 未变时的 1.52 倍
+#   未缓存输入最贵的一次 = 88,599，且 prevChanged=true（前缀一变就几乎全量重算）
+#
+# 取 200000：比自动探测的 1M 小 5 倍，nudge 提前到约 9 万~14 万 token，
+# 把会话上下文规模压到可控区间。可按体验继续下调。
+#
+# 注意：这两个键必须嵌在 compaction-acp 节下面。
+# 写成顶层键无效 —— 设置层是按命名空间取 section 的。
+compaction-acp:
+  modelContextLimit: 250000
+  # 是否仍用模型 API 自动探测窗口。显式给了 modelContextLimit 时置 false 更明确。
+  autoModelContextLimit: false
+  #
+  # 【取值依据：实测全部 57 个历史会话的上下文规模】
+  # 指标 ctx = cacheRead + 未缓存输入 = 该次 prefill 的真实输入总量。
+  # 三个失控会话（约占全部历史 cacheRead 的一半）：
+  #   session-25f08503  1041 调用  92 轮  avg=416,276  p50=446,553  峰值=792,126  ΣcacheRead=432,335,488
+  #   session-fa49e692   823 调用 261 轮  avg=461,417  p50=518,751  峰值=680,984  ΣcacheRead=379,433,984
+  #   session-5a0d7e64   795 调用 118 轮  avg=387,910  p50=384,037  峰值=792,275  ΣcacheRead=307,207,680
+  #   -> 这三个就吃掉约 11 亿 cacheRead。它们的共同特征：avg 冲到 39 万~46 万。
+  # 而绝大多数会话的正常工作集：avg 4.6 万~15 万，p90 9 万~22 万，峰值 9 万~22 万。
+  #
+  # 取 250000 的理由（平衡点）：nudge 上限 0.70 -> 提醒线约 17.5 万 token。
+  #   高于正常工作集（p90 多在 22 万以下），所以日常不会被打扰；
+  #   但足以在会话涨到 39 万以上之前反复提醒，正是那三个失控会话的形状。
+  # 想更省可降到 200000（提醒线 14 万）；想更宽松可升到 300000（提醒线 21 万）。
+  #
+  # 【必须记住的机制限制】ACP 是顾问式的：它只 nudge，真正压缩靠模型调用
+  # `compress` 工具。所以这个阈值让提醒变早，但不强制压缩 ——
+  # 若模型不响应 nudge，上下文仍会涨。它不是确定性保证。
+
+  # 工具结果剪枝：把单条超大工具结果在进入上下文前裁成 head + marker + tail。
+  # 2026-09-18 实测结论：此插件在 dsh-base/cordis.patch.yml 里已挂载且已配好
+  # （thresholdChars 8192 / headChars 4096 / tailChars 1024），无需在此重复配置。
+  # 另需注意：它由 compaction-basic 通过 ctx.get("toolResultPruner") 消费
+  # （dsh-compaction-basic/lib/index.js:885），而 ACP 插件把根域的
+  # compaction-basic 置 disabled —— 但在 agent preset realm 内它仍在跑。
+  # 真正兜住超大输出的是 spill-policy（hooks tools/post-execute），已实测生效。
+
+  # 【2026-09-19 成本优先级更正】上面这些注释讲的是"缓存读取规模"（token 量级的历史事实）。
+  #   用本机全量日志按**实付单价**重算（15380 请求 / ¥189.46 / 131 个会话日志）后，优先级是：
+  #     输出          ¥73.79 = 39% 的钱，且输出里 **78% 是推理字符**   ← 唯一的大头
+  #     未命中输入    ¥57.89 = 31%
+  #     缓存命中输入  ¥57.78 = 30%   ← token 量占比九成以上，钱只占三成（单价差 50~200 倍）
+  #     会话中途冷读  ¥12.30 = **6.5%**（78 次）
+  #     子代理        ¥12.91 = **6.8%**（33 个会话；99.2% 请求在 depth 0）
+  #   ⇒ **先砍推理输出**（档位/思考长度/别用 max 档跑机械活），冷读与扇出各只占 ~7%。
+  #   ⚠️ 上面那三个"失控会话"（session-25f08503 / fa49e692 / 5a0d7e64）在本次重算里依旧是花费前三，
+  #      所以按 token 量压上下文规模的做法**仍然成立**；只是它买不到"砍掉 39%"那个量级的收益。
+  #   ⚠️ 跨机引用：形状可比（三块按钱大致均分、推理占输出七到八成），金额不可比。
+  #      明细/复现命令：仓库 docs/用量统计.md

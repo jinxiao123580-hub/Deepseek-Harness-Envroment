@@ -1,0 +1,38 @@
+{
+  "name": "dsh-profile-web-2",
+  "private": true,
+  "dependencies": {
+    "@anionex/dsh-vision-toolkit": "github:Anionex/dsh-vision-toolkit",
+    "@liustack/modlens": "github:liustack/modlens",
+    "@omdsh-dev/dsh-annotation": "github:omdsh-dev/dsh-annotation",
+    "@omdsh-dev/dsh-genui": "github:omdsh-dev/dsh-genui",
+    "@vectorize-io/hindsight-coding-agents": "^0.3.4",
+    "dsh-at-file": "github:omdsh-dev/dsh-at-file",
+    "dsh-balance-tide": "github:huanyuLv/dsh-balance-tide",
+    "dsh-better-sidebar": "github:omdsh-dev/DSH-better-sidebar",
+    "dsh-chat-import": "github:Nwflower/dsh-chat-import",
+    "dsh-notification": "github:omdsh-dev/dsh-notification",
+    "dsh-status-rotator": "github:01Virex/dsh-status-rotator",
+    "dsh-whale-widget": "link:C:/Users/10905/dsh-whale-widget"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "@liustack/modlens",
+        "@omdsh-dev/dsh-genui",
+        "dsh-at-file",
+        "@omdsh-dev/dsh-annotation",
+        "dsh-status-rotator",
+        "@vectorize-io/hindsight-coding-agents",
+        "dsh-notification",
+        "dsh-chat-import",
+        "@anionex/dsh-vision-toolkit",
+        "dsh-balance-tide",
+        "dsh-better-sidebar",
+        "dsh-whale-widget"
+      ]
+    }
+  }
+}

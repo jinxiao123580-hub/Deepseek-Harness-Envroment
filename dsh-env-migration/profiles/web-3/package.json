@@ -1,0 +1,42 @@
+{
+  "name": "dsh-profile-web-3",
+  "private": true,
+  "dependencies": {
+    "@baihejiangnan/dsh-session-context-menu": "github:baihejiangnan/dsh-session-context-menu",
+    "@deepseek-ai/dsh-web-search-exa": "0.1.0-rc.6",
+    "@deepseek-ai/dsh-web-search-perplexity": "0.1.0-rc.6",
+    "@huanlin/dsh-plugin-yet-another-subagent": "github:HuanLinOTO/dsh-plugin-yet-another-subagent",
+    "@liustack/modlens": "^3.21.1",
+    "billion-context-dsh": "^0.2.23",
+    "dsh-better-sidebar": "github:omdsh-dev/DSH-better-sidebar",
+    "dsh-checkpoint-diff": "^0.5.1",
+    "dsh-context-doctor": "github:Zhenyu98/dsh-context-doctor",
+    "dsh-extension-hub": "^0.2.18",
+    "dsh-plugin-duwg": "github:Yolotd/dsh-plugin-duwg",
+    "dsh-session-archiver": "file:C:/Users/10905/.dsh/plugins/dsh-session-archiver-0.1.0.tgz",
+    "dsh-usage-stats": "github:Make0209/dsh-usage-stats",
+    "dsh-whale-widget": "link:C:/Users/10905/dsh-whale-widget",
+    "zat-dsh-engine": "github:mishibeikejie/zat-dsh-engine"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "@baihejiangnan/dsh-session-context-menu",
+        "zat-dsh-engine",
+        "@liustack/modlens",
+        "billion-context-dsh",
+        "dsh-better-sidebar",
+        "dsh-checkpoint-diff",
+        "dsh-extension-hub",
+        "dsh-whale-widget",
+        "dsh-context-doctor",
+        "@huanlin/dsh-plugin-yet-another-subagent",
+        "dsh-plugin-duwg",
+        "dsh-usage-stats",
+        "dsh-session-archiver"
+      ]
+    }
+  }
+}

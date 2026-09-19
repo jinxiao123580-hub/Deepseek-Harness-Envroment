@@ -1,0 +1,14 @@
+packages:
+  - .
+
+nodeLinker: hoisted
+autoInstallPeers: false
+allowBuilds:
+  node-llama-cpp: true
+  node-pty: true
+  dsh-better-sidebar@https://codeload.github.com/omdsh-dev/DSH-better-sidebar/tar.gz/bb2456bea9510e2b6ffa6cf3cf5d2d893fb313f1: true
+supportedArchitectures:
+  os:
+    - win32
+  cpu:
+    - x64

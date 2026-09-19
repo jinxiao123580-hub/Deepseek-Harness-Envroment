@@ -1,0 +1,8 @@
+{
+  "name": "dsh-job-market",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

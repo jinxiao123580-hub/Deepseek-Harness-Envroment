@@ -1,0 +1,16 @@
+{
+  "name": "dsh-profile-qq",
+  "private": true,
+  "dependencies": {
+    "qq-mode-console": "link:C:/Users/10905/.dsh/plugins/qq-mode-console"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        "@deepseek-ai/dsh-base",
+        "@deepseek-ai/dsh-web-app",
+        "qq-mode-console"
+      ]
+    }
+  }
+}

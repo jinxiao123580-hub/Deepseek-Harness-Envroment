@@ -1,0 +1,103 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+#
+# ── 检索后端增强（2026-09-18 加）─────────────────────────────────────────────
+# 背景：web-3 原先只有 dsh-base 自带的 dsh-web-search-deepseek 一条搜索路径。
+# 该后端实现为 Anthropic 兼容 Messages 调用 + 服务端 web_search 工具，源码注释
+# 原文："Each search costs a model turn"（每次搜索 = 一次完整模型回合），且返回
+# 的 snippet 稀薄，实测导致模型反复换词重搜（同一天 Robotiq 2F-85 / ATI /
+# UR10 CB3 各被搜 10+ 次）。Exa / Perplexity 返回精炼摘要，用于打破该循环。
+#
+# 这两个包【没有声明 dsh.bundle】，所以 `dsh plugin add` 只把它们装进
+# dependencies 而不成为 profile 层 —— 必须在这里手动插行才会挂载。
+# （与 profiles/web 的做法一致：C:\Users\10905\.dsh\profiles\web\cordis.patch.yml）
+#
+# 密钥解析：两者都支持环境变量回退，无需把 key 写进本文件：
+#   exa        -> EXA_API_KEY
+#   perplexity -> PERPLEXITY_API_KEY
+# 出处：dsh-web-search-exa/lib/index.js:149
+#         config.apiKey ?? launchEnvironmentOf(ctx).get("EXA_API_KEY")?.value ?? ""
+#       dsh-web-search-perplexity/lib/index.js:146
+#         config.apiKey ?? launchEnvironmentOf(ctx).get("PERPLEXITY_API_KEY")?.value ?? ""
+# 把 key 写进 C:\Users\10905\.dsh\.credentials.yaml 即可（该文件本就是凭据库）。
+# 未配 key 时 apiKey 为空串，provider 的 available 判定为 false，不抛错，
+# 只是该后端不可选。
+#
+# 注意：这里【故意不】覆盖 web 行的 searchProvider。
+# base 的 web 行当前是 searchProvider: deepseek-official；等 EXA_API_KEY 配好、
+# 确认可用后再切。切换只需取消下面这段的注释：
+#
+# - id: web
+#   config:
+#     searchProvider: exa
+#     fetchProvider: http
+
+- insert:
+    - id: web-search-exa
+      name: '@deepseek-ai/dsh-web-search-exa'
+      # 可选（均有默认值，留空即用默认）：
+      #   searchType: auto | keyword | neural    (默认 auto)
+      #   numResults: <正整数>
+      #   highlightsPerResult: <正整数>           (默认 1)
+
+    - id: web-search-perplexity
+      name: '@deepseek-ai/dsh-web-search-perplexity'
+      # 可选（均有默认值，留空即用默认）：
+      #   model: <字符串>                         (默认 sonar)
+      #   maxTokens: <正整数>                     (默认 1024)
+      #   searchRecency: day | week | month | year
+
+# ── 子代理护栏（2026-09-19 加）────────────────────────────────────────────────
+# 为什么写在这里，而不是 preset（router-standard/agent.cordis.yml）：
+#   实测 `dsh --profile web-3 --dump-config` 显示，本 profile 里
+#   tool-subagent / tool-subagent-fork / tool-workflow / tool-ralph **全部 disabled: true**，
+#   真正接管委派面的是 @huanlin/dsh-plugin-yet-another-subagent（它注册的工具名就是
+#   `subagent`，所以 preset 里那两行护栏落到被禁用的行上，整段悬空：
+#   在合成结果里搜 deepseek-cheap / maxDepth: 1 / persona 文本，出现次数都是 0）。
+#   本文件是 profile 的**用户补丁层，在所有 bundle 层之后应用**，因此这里的 config
+#   会覆盖插件自带 cordis.patch.yml 里的 maxDepth: 3 / toolFilter: none / model: auto。
+#   写在这里还有一个好处：插件升级不会覆盖它。
+# 字段名以插件 lib/types/types.d.ts 为准（注意 toolFilter 用 `tools` 而不是 `deny`）：
+#   model      : { kind: auto|manual, provider, model }
+#   persona    : { kind: inherit } | { kind: custom, text }
+#   toolFilter : { kind: none } | { kind: allow, tools } | { kind: deny, tools }
+#   maxDepth   : number（默认 3）
+- id: yet-another-subagent
+  config:
+    profiles:
+      - id: general
+        label: General
+        # ① 子代理改走 deepseek-cheap（thinking: disabled）——省钱的唯一路径，
+        #    因为 reasoningEffort 没有 per-agent 配置入口（AgentOptions 只有 provider/model/maxTokens）。
+        model:
+          kind: manual
+          provider: deepseek-cheap
+          model: deepseek-flash
+        # ② 禁递归：maxDepth 1 表示子代理不能再派。
+        maxDepth: 1
+        # ③ 第二道锁：把 workflow / ralph 从子代理的工具面上摘掉。
+        #    2026-09-19 实测：这两个**确实不可见**（探针：不在子代理工具列表里）。
+        #    ⚠️ 但 `subagent` 本身**仍在**子代理的工具列表里 —— 拦它的是上面的
+        #    maxDepth: 1（实测报 `Error: subagent depth 2 exceeds maxDepth 1`）。
+        #    所以：深度锁是第一道、也是真正兜住递归的那道；deny 只覆盖 workflow/ralph。
+        toolFilter:
+          kind: deny
+          tools:
+            - subagent
+            - subagent_fork
+            - workflow
+            - ralph
+        # ④ 子代理宪法：报告纪律不靠上级每次在 prompt 里叮嘱。
+        persona:
+          kind: custom
+          text: |-
+            你是被派来执行具体任务的执行型子代理。硬规则：
+            1. 只做被指派的事，不扩大范围；不要再派子代理（工具已禁用）。
+            2. 需要外部事实时先本地查（grep/read），本地没有再联网；一次任务最多 2 次网页检索。
+            3. 详细结果写进 <cwd>/.handoff/reports/<YYYYMMDD>-<slug>.md，文件第一段必须是 <=10 行的结论摘要（重要在前）。
+            4. 你回给上级的那段话只允许：<=10 行摘要 + 报告文件绝对路径 + 你没确定的事。禁止把长文或原始材料贴回上级。
+            5. 不复述任务背景，不解释你的过程。
+        backgroundMode: continuable
+        builtin: true
+    generalFixed: true

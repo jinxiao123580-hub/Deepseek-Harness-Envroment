@@ -1,0 +1,3 @@
+name: Standard (leash)
+description: "Standard 全套工具，但子代理不能再生子代理（maxDepth 1 + toolFilter deny subagent/subagent_fork/workflow/ralph）。其余与 standard 逐字节一致。"
+order: 2

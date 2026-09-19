@@ -1,0 +1,46 @@
+{
+  "kitVersion": 2,
+  "dshVersion": "0.1.5-rc.2",
+  "shippedStandardSha256": "08a029c64fdeaabe415a5627ef73ce6f6c6bc61dadaf9989d11f9e15608907f6",
+  "activeProfile": "web-3",
+  "lastSummary": {
+    "ok": 17,
+    "warn": 1,
+    "fail": 0,
+    "inert": 0,
+    "unverifiable": 0
+  },
+  "lastCheckedAt": "2026-09-19T06:36:58.715Z",
+  "wiringCache": {
+    "key": "0.1.5-rc.2|web-3|ui-onboarding,llm-pi-ai,agent-default-model,spill-policy,agent-presets,ui-theme,ya-subagent,compaction-basic,compaction-acp",
+    "owners": {
+      "ui-onboarding": [
+        "@deepseek-ai/dsh-client-ui-settings-general"
+      ],
+      "llm-pi-ai": [
+        "@deepseek-ai/dsh-authorization"
+      ],
+      "agent-default-model": [
+        "@deepseek-ai/dsh-agent-default-model"
+      ],
+      "spill-policy": [
+        "@deepseek-ai/dsh-client-ui-tool"
+      ],
+      "agent-presets": [
+        "@deepseek-ai/dsh-agent-presets"
+      ],
+      "ui-theme": [
+        "@deepseek-ai/dsh-client-ui-layout"
+      ],
+      "ya-subagent": [
+        "@huanlin/dsh-plugin-yet-another-subagent"
+      ],
+      "compaction-basic": [
+        "@deepseek-ai/dsh-compaction-basic"
+      ],
+      "compaction-acp": [
+        "billion-context-dsh"
+      ]
+    }
+  }
+}

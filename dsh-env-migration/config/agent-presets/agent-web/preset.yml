@@ -1,0 +1,2 @@
+name: 标准 Agent（网页检索增强）
+description: standard 预设的副本，启用 web_fetch 原生网页抓取（后端 web-fetch-http）；Exa 搜索与 Tavily MCP 为宿主层能力，所有预设共享。

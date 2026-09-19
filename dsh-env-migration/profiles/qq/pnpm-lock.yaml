@@ -1,0 +1,13 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      qq-mode-console:
+        specifier: link:C:/Users/10905/.dsh/plugins/qq-mode-console
+        version: link:../../plugins/qq-mode-console
